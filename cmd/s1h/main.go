@@ -3,17 +3,21 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/noboruma/s1h/internal/credentials"
 	"github.com/noboruma/s1h/internal/ssh"
 	"github.com/rivo/tview"
 )
 
-var autoCompleteIPs []string
-var autoCompleteHosts []string
+var (
+	autoCompleteIPs   []string
+	autoCompleteHosts []string
+)
 
-func displaySSHConfig(configs []ssh.SSHConfig) {
+func displaySSHConfig(configs []ssh.SSHConfig, creds credentials.Credentials) {
 	app := tview.NewApplication()
 
 	pages := tview.NewPages()
@@ -23,23 +27,27 @@ func displaySSHConfig(configs []ssh.SSHConfig) {
 
 	table.SetSelectable(true, false)
 
-	table.SetCell(0, 0, tview.NewTableCell("Host").
+	table.SetCell(0, 0, tview.NewTableCell("Host (F1)").
 		SetTextColor(tcell.ColorBlue).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	table.SetCell(0, 1, tview.NewTableCell("User").
+	table.SetCell(0, 1, tview.NewTableCell("User (F2)").
 		SetTextColor(tcell.ColorBlueViolet).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	table.SetCell(0, 2, tview.NewTableCell("Port").
+	table.SetCell(0, 2, tview.NewTableCell("Port (F3)").
 		SetTextColor(tcell.ColorGreen).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	table.SetCell(0, 3, tview.NewTableCell("HostName").
+	table.SetCell(0, 3, tview.NewTableCell("HostName (F4)").
 		SetTextColor(tcell.ColorRed).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	table.SetCell(0, 4, tview.NewTableCell("IdentityFile").
+	table.SetCell(0, 4, tview.NewTableCell("IdentityFile (F5)").
+		SetTextColor(tcell.ColorBlue).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false))
+	table.SetCell(0, 5, tview.NewTableCell("Password").
 		SetTextColor(tcell.ColorBlue).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
@@ -55,7 +63,10 @@ func displaySSHConfig(configs []ssh.SSHConfig) {
 			SetAlign(tview.AlignLeft))
 		table.SetCell(i+1, 4, tview.NewTableCell(config.IdentityFile).
 			SetAlign(tview.AlignLeft))
-
+		if _, has := creds.Entries[config.Host]; has {
+			table.SetCell(i+1, 5, tview.NewTableCell("O").
+				SetAlign(tview.AlignLeft))
+		}
 	}
 
 	table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.ColorViolet))
@@ -168,5 +179,23 @@ func main() {
 		autoCompleteIPs = append(autoCompleteIPs, cfg.HostName)
 	}
 
-	displaySSHConfig(configs)
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		fmt.Println("Cannot access config dir: ", err.Error())
+		os.Exit(1)
+	}
+	masterKeyFile := filepath.Join(configDir, "master.key")
+	credsFile := filepath.Join(configDir, "credentials.enc")
+
+	var creds credentials.Credentials
+	key, err := credentials.LoadMasterKey(masterKeyFile)
+	if err == nil {
+		creds, err := credentials.LoadCredentials(credsFile, key)
+		if err != nil {
+			fmt.Println("Error loading creds:", creds)
+			os.Exit(1)
+		}
+	}
+
+	displaySSHConfig(configs, creds)
 }
