@@ -33,7 +33,7 @@ passwd create-key
 This command generates a new encryption key for securing credentials stored locally.
 
 ```sh
-passwd update <host> <password>
+passwd upsert <host> <password>
 ```
 This updates the stored credentials for the specified ssh host.
 

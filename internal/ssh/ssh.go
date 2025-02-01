@@ -2,11 +2,14 @@ package ssh
 
 import (
 	"bufio"
+	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/user"
 	"path/filepath"
 	"strings"
+	"time"
 
 	cssh "golang.org/x/crypto/ssh"
 )
@@ -99,4 +102,90 @@ func expandTilde(path string) (string, error) {
 		path = filepath.Join(homeDir, path[1:])
 	}
 	return path, nil
+}
+
+func CheckSSHPort(host string, port int, timeout time.Duration) bool {
+	address := fmt.Sprintf("%s:%d", host, port)
+
+	conn, err := net.DialTimeout("tcp", address, timeout)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+
+	return true
+}
+
+func ExecuteSSHShell(endpoint, user, password, identityFile string) error {
+
+	os.Stdout.Write([]byte{'\n'})
+
+	var config cssh.ClientConfig
+
+	if password != "" {
+		config = cssh.ClientConfig{
+			User: user,
+			Auth: []cssh.AuthMethod{
+				cssh.Password(password),
+			},
+			HostKeyCallback: cssh.InsecureIgnoreHostKey(),
+		}
+	} else if identityFile != "" {
+		auth, err := LoadIdentifyFile(identityFile)
+		if err != nil {
+			return err
+		}
+		config = cssh.ClientConfig{
+			User: user,
+			Auth: []cssh.AuthMethod{
+				cssh.PublicKeys(auth),
+			},
+			HostKeyCallback: cssh.InsecureIgnoreHostKey(),
+		}
+	}
+
+	client, err := cssh.Dial("tcp", endpoint, &config)
+	if err != nil {
+		return err
+	}
+
+	session, err := client.NewSession()
+	if err != nil {
+		return err
+	}
+	defer session.Close()
+
+	session.Stdout = os.Stdout
+	session.Stderr = os.Stderr
+
+	sessionStdin, err := session.StdinPipe()
+	if err != nil {
+		return err
+	}
+	defer sessionStdin.Close()
+
+	go func() {
+		reader := bufio.NewReader(os.Stdin)
+		defer session.Close()
+		for {
+			input, err := reader.ReadString('\n')
+			if err != nil {
+				break
+			}
+			sessionStdin.Write([]byte(input))
+		}
+	}()
+
+	err = session.RequestPty("xterm-256color", 80, 40, cssh.TerminalModes{})
+	if err != nil {
+		return err
+	}
+
+	err = session.Shell()
+	if err != nil {
+		return err
+	}
+
+	_ = session.Wait()
+	return nil
 }

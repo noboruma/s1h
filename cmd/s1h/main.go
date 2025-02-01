@@ -1,19 +1,17 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/noboruma/s1h/internal/credentials"
 	"github.com/noboruma/s1h/internal/ssh"
 	"github.com/rivo/tview"
-
-	cssh "golang.org/x/crypto/ssh"
 )
 
 var (
@@ -25,80 +23,6 @@ const (
 	masterKeyFileName = "master.key"
 	credsFileName     = "credentials.enc"
 )
-
-func executeSSHShell(endpoint, user, password, identityFile string) error {
-
-	os.Stdout.Write([]byte{'\n'})
-
-	var config cssh.ClientConfig
-
-	if password != "" {
-		config = cssh.ClientConfig{
-			User: user,
-			Auth: []cssh.AuthMethod{
-				cssh.Password(password),
-			},
-			HostKeyCallback: cssh.InsecureIgnoreHostKey(),
-		}
-	} else if identityFile != "" {
-		auth, err := ssh.LoadIdentifyFile(identityFile)
-		if err != nil {
-			return err
-		}
-		config = cssh.ClientConfig{
-			User: user,
-			Auth: []cssh.AuthMethod{
-				cssh.PublicKeys(auth),
-			},
-			HostKeyCallback: cssh.InsecureIgnoreHostKey(),
-		}
-	}
-
-	client, err := cssh.Dial("tcp", endpoint, &config)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	session, err := client.NewSession()
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer session.Close()
-
-	session.Stdout = os.Stdout
-	session.Stderr = os.Stderr
-
-	sessionStdin, err := session.StdinPipe()
-	if err != nil {
-		return err
-	}
-	defer sessionStdin.Close()
-
-	go func() {
-		reader := bufio.NewReader(os.Stdin)
-		defer session.Close()
-		for {
-			input, err := reader.ReadString('\n')
-			if err != nil {
-				break
-			}
-			sessionStdin.Write([]byte(input))
-		}
-	}()
-
-	err = session.RequestPty("xterm-256color", 80, 40, cssh.TerminalModes{})
-	if err != nil {
-		return err
-	}
-
-	err = session.Shell()
-	if err != nil {
-		return err
-	}
-
-	_ = session.Wait()
-	return nil
-}
 
 func displaySSHConfig(configs []ssh.SSHConfig, creds credentials.Credentials) {
 	app := tview.NewApplication()
@@ -140,10 +64,6 @@ func displaySSHConfig(configs []ssh.SSHConfig, creds credentials.Credentials) {
 		SetTextColor(tcell.ColorBlue).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	table.SetCell(0, 5, tview.NewTableCell("Password").
-		SetTextColor(tcell.ColorBlue).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
 
 	for i, config := range configs {
 		table.SetCell(i+1, 0, tview.NewTableCell(config.Host).
@@ -154,13 +74,32 @@ func displaySSHConfig(configs []ssh.SSHConfig, creds credentials.Credentials) {
 			SetAlign(tview.AlignLeft))
 		table.SetCell(i+1, 3, tview.NewTableCell(config.HostName).
 			SetAlign(tview.AlignLeft))
-		table.SetCell(i+1, 4, tview.NewTableCell(config.IdentityFile).
-			SetAlign(tview.AlignLeft))
 		if _, has := creds.Entries[config.Host]; has {
-			table.SetCell(i+1, 5, tview.NewTableCell("O").
+			table.SetCell(i+1, 4, tview.NewTableCell("*****").
+				SetAlign(tview.AlignLeft))
+		} else {
+			table.SetCell(i+1, 4, tview.NewTableCell(config.IdentityFile).
 				SetAlign(tview.AlignLeft))
 		}
 	}
+
+	go func() {
+		for ; ; <-time.After(2 * time.Minute) {
+			for i, config := range configs {
+				port, err := strconv.Atoi(config.Port)
+				if err != nil {
+					port = 22
+				}
+				go func(i int) {
+					if ssh.CheckSSHPort(config.HostName, port, 10*time.Second) {
+						table.GetCell(i+1, 0).SetTextColor(tcell.ColorDarkGreen)
+					} else {
+						table.GetCell(i+1, 0).SetTextColor(tcell.ColorDarkRed)
+					}
+				}(i)
+			}
+		}
+	}()
 
 	table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.ColorViolet))
 	table.SetSelectedFunc(func(row, column int) {
@@ -179,7 +118,7 @@ func displaySSHConfig(configs []ssh.SSHConfig, creds credentials.Credentials) {
 
 		pages.AddPage("popup", sshPage, true, true)
 		app.Suspend(func() {
-			err := executeSSHShell(fmt.Sprintf("%s:%s", selectedConfig.HostName, selectedConfig.Port), selectedConfig.User, creds.Entries[selectedConfig.Host], selectedConfig.IdentityFile)
+			err := ssh.ExecuteSSHShell(fmt.Sprintf("%s:%s", selectedConfig.HostName, selectedConfig.Port), selectedConfig.User, creds.Entries[selectedConfig.Host], selectedConfig.IdentityFile)
 			pages.RemovePage("popup")
 			if err != nil {
 				popup := tview.NewModal().
@@ -262,7 +201,16 @@ func displaySSHConfig(configs []ssh.SSHConfig, creds credentials.Credentials) {
 
 			}).SetFieldWidth(15)
 			pages.AddPage("popup", popup, false, true)
-		case 's':
+		}
+		switch event.Rune() {
+		case 'q':
+			if pages.HasPage("popup") {
+				pages.RemovePage("popup")
+			} else {
+				app.Stop()
+			}
+		case 'c': // copy to
+		case 'C': // copy from
 		}
 		return event
 	})
