@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"os"
@@ -20,7 +21,14 @@ var (
 	autoCompleteHosts []string
 )
 
-func executeSSHShell(endpoint, user, password, identityFile string) {
+const (
+	masterKeyFileName = "master.key"
+	credsFileName     = "credentials.enc"
+)
+
+func executeSSHShell(endpoint, user, password, identityFile string) error {
+
+	os.Stdout.Write([]byte{'\n'})
 
 	var config cssh.ClientConfig
 
@@ -35,8 +43,7 @@ func executeSSHShell(endpoint, user, password, identityFile string) {
 	} else if identityFile != "" {
 		auth, err := ssh.LoadIdentifyFile(identityFile)
 		if err != nil {
-			println(err.Error())
-			return
+			return err
 		}
 		config = cssh.ClientConfig{
 			User: user,
@@ -60,19 +67,37 @@ func executeSSHShell(endpoint, user, password, identityFile string) {
 
 	session.Stdout = os.Stdout
 	session.Stderr = os.Stderr
-	session.Stdin = os.Stdin
+
+	sessionStdin, err := session.StdinPipe()
+	if err != nil {
+		return err
+	}
+	defer sessionStdin.Close()
+
+	go func() {
+		reader := bufio.NewReader(os.Stdin)
+		defer session.Close()
+		for {
+			input, err := reader.ReadString('\n')
+			if err != nil {
+				break
+			}
+			sessionStdin.Write([]byte(input))
+		}
+	}()
 
 	err = session.RequestPty("xterm-256color", 80, 40, cssh.TerminalModes{})
 	if err != nil {
-		log.Fatalf("failed to request PTY: %v", err)
+		return err
 	}
 
 	err = session.Shell()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	_ = session.Wait()
+	return nil
 }
 
 func displaySSHConfig(configs []ssh.SSHConfig, creds credentials.Credentials) {
@@ -154,8 +179,18 @@ func displaySSHConfig(configs []ssh.SSHConfig, creds credentials.Credentials) {
 
 		pages.AddPage("popup", sshPage, true, true)
 		app.Suspend(func() {
-			executeSSHShell(fmt.Sprintf("%s:%s", selectedConfig.HostName, selectedConfig.Port), selectedConfig.User, creds.Entries[selectedConfig.Host], selectedConfig.IdentityFile)
+			err := executeSSHShell(fmt.Sprintf("%s:%s", selectedConfig.HostName, selectedConfig.Port), selectedConfig.User, creds.Entries[selectedConfig.Host], selectedConfig.IdentityFile)
 			pages.RemovePage("popup")
+			if err != nil {
+				popup := tview.NewModal().
+					SetText(fmt.Sprintf("Error accessing ssh for Host %s: %v",
+						selectedConfig.Host, err)).
+					AddButtons([]string{"OK"}).
+					SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+						pages.RemovePage("popup")
+					})
+				pages.AddPage("popup", popup, false, true)
+			}
 		})
 
 	})
@@ -261,8 +296,8 @@ func main() {
 		fmt.Println("Cannot access config dir: ", err.Error())
 		os.Exit(1)
 	}
-	masterKeyFile := filepath.Join(configDir, "master.key")
-	credsFile := filepath.Join(configDir, "credentials.enc")
+	masterKeyFile := filepath.Join(configDir, masterKeyFileName)
+	credsFile := filepath.Join(configDir, credsFileName)
 
 	var creds credentials.Credentials
 	key, err := credentials.LoadMasterKey(masterKeyFile)
