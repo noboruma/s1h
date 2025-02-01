@@ -11,7 +11,7 @@ import (
 
 func main() {
 	createKeyCmd := flag.NewFlagSet("create-key", flag.ExitOnError)
-	updateCmd := flag.NewFlagSet("update", flag.ExitOnError)
+	updateCmd := flag.NewFlagSet("upsert", flag.ExitOnError)
 	removeCmd := flag.NewFlagSet("remove", flag.ExitOnError)
 
 	var hostname, password string

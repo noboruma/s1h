@@ -302,9 +302,9 @@ func main() {
 	var creds credentials.Credentials
 	key, err := credentials.LoadMasterKey(masterKeyFile)
 	if err == nil {
-		creds, err := credentials.LoadCredentials(credsFile, key)
+		creds, err = credentials.LoadCredentials(credsFile, key)
 		if err != nil {
-			fmt.Println("Error loading creds:", creds)
+			fmt.Println("Error loading creds:", err.Error())
 			os.Exit(1)
 		}
 	}

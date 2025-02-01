@@ -47,8 +47,8 @@ func encrypt(data []byte, key []byte) ([]byte, error) {
 	}
 
 	stream := cipher.NewCBCEncrypter(block, iv)
-	padding := aes.BlockSize - len(data)%aes.BlockSize
-	data = append(data, byte(padding)) // PKCS#7 padding
+	padding := make([]byte, aes.BlockSize-len(data)%aes.BlockSize)
+	data = append(data, padding...) // PKCS#7 padding
 	stream.CryptBlocks(data, data)
 
 	encrypted := append(iv, data...)
@@ -76,6 +76,14 @@ func decrypt(encrypted []byte, key []byte) ([]byte, error) {
 
 	return encrypted, nil
 }
+func LastIndex(data []byte, b byte) int {
+	for i := len(data) - 1; i >= 0; i-- {
+		if data[i] == b {
+			return i
+		}
+	}
+	return -1
+}
 
 func LoadCredentials(filename string, key []byte) (Credentials, error) {
 	var creds Credentials
@@ -90,7 +98,9 @@ func LoadCredentials(filename string, key []byte) (Credentials, error) {
 		return creds, err
 	}
 
-	err = json.Unmarshal(decrypted, &creds)
+	n := LastIndex(decrypted, byte('}'))
+
+	err = json.Unmarshal(decrypted[:n+1], &creds)
 	if err != nil {
 		return creds, err
 	}
