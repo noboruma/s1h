@@ -2,8 +2,13 @@ package ssh
 
 import (
 	"bufio"
+	"log"
 	"os"
+	"os/user"
+	"path/filepath"
 	"strings"
+
+	cssh "golang.org/x/crypto/ssh"
 )
 
 type SSHConfig struct {
@@ -69,4 +74,29 @@ func ParseSSHConfig(filePath string) ([]SSHConfig, error) {
 	}
 
 	return configs, nil
+}
+
+func LoadIdentifyFile(privateKeyPath string) (cssh.Signer, error) {
+	privateKeyPath, err := expandTilde(privateKeyPath)
+	if err != nil {
+		return nil, err
+	}
+	privateKey, err := os.ReadFile(privateKeyPath)
+	if err != nil {
+		log.Fatalf("Failed to open private key file: %v", err)
+	}
+
+	return cssh.ParsePrivateKey(privateKey)
+}
+
+func expandTilde(path string) (string, error) {
+	if path[0] == '~' {
+		usr, err := user.Current()
+		if err != nil {
+			return "", err
+		}
+		homeDir := usr.HomeDir
+		path = filepath.Join(homeDir, path[1:])
+	}
+	return path, nil
 }

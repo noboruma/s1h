@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,8 @@ import (
 	"github.com/noboruma/s1h/internal/credentials"
 	"github.com/noboruma/s1h/internal/ssh"
 	"github.com/rivo/tview"
+
+	cssh "golang.org/x/crypto/ssh"
 )
 
 var (
@@ -17,8 +20,73 @@ var (
 	autoCompleteHosts []string
 )
 
+func executeSSHShell(endpoint, user, password, identityFile string) {
+
+	var config cssh.ClientConfig
+
+	if password != "" {
+		config = cssh.ClientConfig{
+			User: user,
+			Auth: []cssh.AuthMethod{
+				cssh.Password(password),
+			},
+			HostKeyCallback: cssh.InsecureIgnoreHostKey(),
+		}
+	} else if identityFile != "" {
+		auth, err := ssh.LoadIdentifyFile(identityFile)
+		if err != nil {
+			println(err.Error())
+			return
+		}
+		config = cssh.ClientConfig{
+			User: user,
+			Auth: []cssh.AuthMethod{
+				cssh.PublicKeys(auth),
+			},
+			HostKeyCallback: cssh.InsecureIgnoreHostKey(),
+		}
+	}
+
+	client, err := cssh.Dial("tcp", endpoint, &config)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	session, err := client.NewSession()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer session.Close()
+
+	session.Stdout = os.Stdout
+	session.Stderr = os.Stderr
+	session.Stdin = os.Stdin
+
+	err = session.RequestPty("xterm-256color", 80, 40, cssh.TerminalModes{})
+	if err != nil {
+		log.Fatalf("failed to request PTY: %v", err)
+	}
+
+	err = session.Shell()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_ = session.Wait()
+}
+
 func displaySSHConfig(configs []ssh.SSHConfig, creds credentials.Credentials) {
 	app := tview.NewApplication()
+
+	sshOutput := tview.NewTextView().
+		SetText("Connecting...\n").
+		SetTextAlign(tview.AlignLeft).
+		SetDynamicColors(true)
+
+	sshPage := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		SetFullScreen(true).
+		AddItem(sshOutput, 0, 1, false)
 
 	pages := tview.NewPages()
 
@@ -72,15 +140,24 @@ func displaySSHConfig(configs []ssh.SSHConfig, creds credentials.Credentials) {
 	table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.ColorViolet))
 	table.SetSelectedFunc(func(row, column int) {
 		selectedConfig := configs[row-1]
-		popup := tview.NewModal().
-			SetText(fmt.Sprintf("Host: %s\nUser: %s\nPort: %s\nHostName: %s\nIdentityFile: %s",
-				selectedConfig.Host, selectedConfig.User, selectedConfig.Port, selectedConfig.HostName, selectedConfig.IdentityFile)).
-			AddButtons([]string{"OK"}).
-			SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-				pages.RemovePage("popup")
-			})
+		if _, has := creds.Entries[selectedConfig.Host]; !has && selectedConfig.IdentityFile == "" {
+			popup := tview.NewModal().
+				SetText(fmt.Sprintf("Missing credentials for Host: %s\nUser: %s\nPort: %s\nHostName: %s\nIdentityFile: %s",
+					selectedConfig.Host, selectedConfig.User, selectedConfig.Port, selectedConfig.HostName, selectedConfig.IdentityFile)).
+				AddButtons([]string{"OK"}).
+				SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+					pages.RemovePage("popup")
+				})
+			pages.AddPage("popup", popup, false, true)
+			return
+		}
 
-		pages.AddPage("popup", popup, false, true)
+		pages.AddPage("popup", sshPage, true, true)
+		app.Suspend(func() {
+			executeSSHShell(fmt.Sprintf("%s:%s", selectedConfig.HostName, selectedConfig.Port), selectedConfig.User, creds.Entries[selectedConfig.Host], selectedConfig.IdentityFile)
+			pages.RemovePage("popup")
+		})
+
 	})
 
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
