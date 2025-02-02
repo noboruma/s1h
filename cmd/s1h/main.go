@@ -61,7 +61,7 @@ func displaySSHConfig(configs []ssh.SSHConfig) {
 		SetTextColor(tcell.ColorRed).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	table.SetCell(0, 4, tview.NewTableCell("IdentityFile").
+	table.SetCell(0, 4, tview.NewTableCell("Auth").
 		SetTextColor(tcell.ColorBlue).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
@@ -76,17 +76,17 @@ func displaySSHConfig(configs []ssh.SSHConfig) {
 		table.SetCell(i+1, 3, tview.NewTableCell(config.HostName).
 			SetAlign(tview.AlignLeft))
 		if config.Password != "" && config.IdentityFile == "" {
-			table.SetCell(i+1, 4, tview.NewTableCell("*****").
+			table.SetCell(i+1, 4, tview.NewTableCell("Password").
 				SetAlign(tview.AlignLeft))
-		} else {
-			table.SetCell(i+1, 4, tview.NewTableCell(config.IdentityFile).
+		} else if config.IdentityFile != "" {
+			table.SetCell(i+1, 4, tview.NewTableCell("Key").
 				SetAlign(tview.AlignLeft))
 		}
 	}
 
-	go reachabilityCheck(configs, table)
+	go reachabilityCheck(configs, table, app)
 
-	table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.ColorViolet))
+	//table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.ColorViolet))
 	table.SetSelectedFunc(func(row, column int) {
 		selectedConfig := configs[row-1]
 		if selectedConfig.Password == "" && selectedConfig.IdentityFile == "" {
@@ -144,6 +144,7 @@ func displaySSHConfig(configs []ssh.SSHConfig) {
 			if err != nil {
 				infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
 					selectedConfig.Host, err))
+				return event
 			}
 			popup := tview.NewForm()
 			fromField := tview.NewInputField().SetFieldWidth(256)
@@ -177,6 +178,7 @@ func displaySSHConfig(configs []ssh.SSHConfig) {
 			if err != nil {
 				infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
 					selectedConfig.Host, err))
+				return event
 			}
 			popup := tview.NewForm()
 			fromField := tview.NewInputField()
@@ -215,7 +217,7 @@ func displaySSHConfig(configs []ssh.SSHConfig) {
 	}
 }
 
-func reachabilityCheck(configs []ssh.SSHConfig, table *tview.Table) {
+func reachabilityCheck(configs []ssh.SSHConfig, table *tview.Table, app *tview.Application) {
 	for ; ; <-time.After(2 * time.Minute) {
 		for i, config := range configs {
 			port, err := strconv.Atoi(config.Port)
@@ -228,6 +230,7 @@ func reachabilityCheck(configs []ssh.SSHConfig, table *tview.Table) {
 				} else {
 					table.GetCell(i+1, 0).SetTextColor(tcell.ColorDarkRed)
 				}
+				app.Draw()
 			}(i)
 		}
 	}

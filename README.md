@@ -1,25 +1,59 @@
-# s1h: k9s-inspired ssh layer
+# s1h: ssh & scp in a unified TUI
 
+s1h is a simple TUI inspired from [K9s](https://github.com/derailed/k9s).
 This repository contains two command-line tools written in Golang:
 
-1. **passwd** - Manage credentials securely.
-2. **s1h** - Quickly SSH into configured hosts defined in your ssh config file.
+1. **s1h** - Quickly SSH/SCP into configured hosts defined in your ssh config file.
+2. **passwd** - Manage credentials securely. Used for key-less access.
 
 ## Installation
 
 ```sh
-# Clone the repository
+# Install from Go directly:
+go install https://github.com/noboruma/s1h@latest
+
+# Or build from the repository source
 git clone https://github.com/noboruma/s1h
 cd s1h
-
-# Build the tools
 make build
 
 # Or install directly using Go
 go install ./...
+
+# Or download the binaries from the release
+wget https://github.com/noboruma/releases
 ```
 
 ## Tools Overview
+
+### s1h
+
+The `s1h` tool reads the SSH config file and allows you to select a host to SSH into using either a password or SSH keys.
+
+#### Usage:
+
+```sh
+s1h
+```
+This command displays a list of available SSH hosts from your `~/.ssh/config`, allowing you to select one and connect. It also allows you to use scp commands.
+
+#### Example:
+```
+s1h
+```
+![main output](.github/assets/main.png)
+
+You can search using associated F1/F2/F3/F4 to jump directly to the entry.
+
+![main output](.github/assets/search.png)
+
+If you press `enter` and it will automatically use the configured authentication method (password or SSH key) to establish the connection.
+
+If you press `c` it will give the option to upload a file to the selected host:
+![main output](.github/assets/upload.png)
+
+If you press `C` it will give the option to download a file from the selected host:
+![main output](.github/assets/download.png)
 
 ### passwd
 
@@ -41,40 +75,15 @@ This updates the stored credentials for the specified ssh host.
 
 ```sh
 passwd create-key
-# Output: Key created successfully!
+# Output: MAster key saved to ~/.config/s1h/master.key
 
-passwd update remotevm1 mySecureP@ss
-# Output: Credentials updated for remotevm1.
-```
+passwd upsert remote-vm mySecureP@ss
+# Output: Credentials updated.
+
+passwd remove remote-vm
+# Output: Credentials removed.
 
 ---
-
-### s1h
-
-The `s1h` tool reads the SSH config file and allows you to select a host to SSH into using either a password or SSH keys.
-
-#### Usage:
-
-```sh
-s1h
-```
-This command displays a list of available SSH hosts from your `~/.ssh/config`, allowing you to select one and connect.
-
-#### Example:
-
-```sh
-s1h
-# Output:
-
-#Host (F1)   User (F2) Port (F3) HostName (F4)    IdentityFile…  Password
-#server1     root      22        1.2.3.4          ~/.ssh/id_ed…
-#server2     root      22        4.5.6.7          ~/.ssh/id_ed…
-#server3     root      22        7.8.9.0                         O
-
-```
-
-You can search using associated F1/F2/F3/F4 to jump directly to the entry.
-Press enter and it will automatically use the configured authentication method (password or SSH key) to establish the connection.
 
 ## License
 
