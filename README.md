@@ -1,4 +1,4 @@
-# s1h: ssh & scp in a unified TUI
+# s1h: ssh + scp in one unified TUI
 
 `s1h` is a simple TUI inspired by [K9s](https://github.com/derailed/k9s).
 This repository contains two command-line tools written in Golang:
