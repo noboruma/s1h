@@ -75,13 +75,14 @@ This updates the stored credentials for the specified ssh host.
 
 ```sh
 passwd create-key
-# Output: MAster key saved to ~/.config/s1h/master.key
+# Output: Master key saved to ~/.config/s1h/master.key
 
 passwd upsert remote-vm mySecureP@ss
 # Output: Credentials updated.
 
 passwd remove remote-vm
 # Output: Credentials removed.
+```
 
 ---
 
