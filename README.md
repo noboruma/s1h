@@ -1,6 +1,6 @@
 # s1h: ssh & scp in a unified TUI
 
-s1h is a simple TUI inspired by [K9s](https://github.com/derailed/k9s).
+`s1h` is a simple TUI inspired by [K9s](https://github.com/derailed/k9s).
 This repository contains two command-line tools written in Golang:
 
 1. **s1h** - Quickly SSH/SCP into configured hosts defined in your ssh config file.
@@ -15,7 +15,7 @@ go install github.com/noboruma/s1h/cmd/s1h@latest
 go install github.com/noboruma/s1h/cmd/s1hpass@latest
 
 ```
-From the source:
+Or from the repository:
 ```
 
 # Or build from the repository source
