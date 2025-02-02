@@ -132,19 +132,20 @@ func displaySSHConfig(configs []ssh.SSHConfig) {
 		}
 		switch event.Rune() {
 		case 'q':
-			if pages.HasPage("popup") {
-				pages.RemovePage("popup")
-			} else {
+			if !pages.HasPage("popup") {
 				app.Stop()
 			}
 		case 'c': // copy to
+			if pages.HasPage("popup") {
+				return event
+			}
 			row, _ := table.GetSelection()
 			selectedConfig := configs[row-1]
 			client, err := ssh.SSHClient(selectedConfig)
 			if err != nil {
 				infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
 					selectedConfig.Host, err))
-				return event
+				return nil
 			}
 			popup := tview.NewForm()
 			fromField := tview.NewInputField().SetFieldWidth(256)
@@ -171,14 +172,18 @@ func displaySSHConfig(configs []ssh.SSHConfig) {
 				pages.RemovePage("popup")
 			})
 			pages.AddPage("popup", popup, true, true)
+			return nil
 		case 'C': // copy from
+			if pages.HasPage("popup") {
+				return event
+			}
 			row, _ := table.GetSelection()
 			selectedConfig := configs[row-1]
 			client, err := ssh.SSHClient(selectedConfig)
 			if err != nil {
 				infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
 					selectedConfig.Host, err))
-				return event
+				return nil
 			}
 			popup := tview.NewForm()
 			fromField := tview.NewInputField()
@@ -206,6 +211,7 @@ func displaySSHConfig(configs []ssh.SSHConfig) {
 				pages.RemovePage("popup")
 			})
 			pages.AddPage("popup", popup, true, true)
+			return nil
 		}
 		return event
 	})
