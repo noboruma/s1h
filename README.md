@@ -8,21 +8,35 @@ This repository contains two command-line tools written in Golang:
 
 ## Installation
 
+From go:
 ```sh
 # Install from Go directly:
 go install github.com/noboruma/s1h/cmd/s1h@latest
 go install github.com/noboruma/s1h/cmd/s1hpass@latest
+
+```
+From the source:
+```
 
 # Or build from the repository source
 git clone https://github.com/noboruma/s1h
 cd s1h
 make build
 
-# Or install directly using Go
+# You can also install directly using Go
 go install ./...
+```
 
-# Or download the binaries from the release
-wget https://github.com/noboruma/releases
+Or download the binaries directly (choose your os/arch):
+
+```
+# download the binaries from the release
+wget https://github.com/noboruma/s1h/releases/download/v0.0.1/darwin-arm64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.0.1/darwin-amd64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.0.1/linux-arm64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.0.1/linux-amd64.tar.gz
+
+tar xvf chosen.tar.gz
 ```
 
 ## Tools Overview
