@@ -3,6 +3,7 @@ package ssh
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -11,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/sftp"
+	"golang.org/x/crypto/ssh"
 	cssh "golang.org/x/crypto/ssh"
 )
 
@@ -20,6 +23,11 @@ type SSHConfig struct {
 	Port         string
 	HostName     string
 	IdentityFile string
+	Password     string
+}
+
+func (c SSHConfig) Endpoint() string {
+	return fmt.Sprintf("%s:%s", c.HostName, c.Port)
 }
 
 func ParseSSHConfig(filePath string) ([]SSHConfig, error) {
@@ -116,27 +124,24 @@ func CheckSSHPort(host string, port int, timeout time.Duration) bool {
 	return true
 }
 
-func ExecuteSSHShell(endpoint, user, password, identityFile string) error {
-
-	os.Stdout.Write([]byte{'\n'})
+func SSHClient(cfg SSHConfig) (*cssh.Client, error) {
 
 	var config cssh.ClientConfig
-
-	if password != "" {
+	if cfg.Password != "" {
 		config = cssh.ClientConfig{
-			User: user,
+			User: cfg.User,
 			Auth: []cssh.AuthMethod{
-				cssh.Password(password),
+				cssh.Password(cfg.Password),
 			},
 			HostKeyCallback: cssh.InsecureIgnoreHostKey(),
 		}
-	} else if identityFile != "" {
-		auth, err := LoadIdentifyFile(identityFile)
+	} else if cfg.IdentityFile != "" {
+		auth, err := LoadIdentifyFile(cfg.IdentityFile)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		config = cssh.ClientConfig{
-			User: user,
+			User: cfg.User,
 			Auth: []cssh.AuthMethod{
 				cssh.PublicKeys(auth),
 			},
@@ -144,7 +149,14 @@ func ExecuteSSHShell(endpoint, user, password, identityFile string) error {
 		}
 	}
 
-	client, err := cssh.Dial("tcp", endpoint, &config)
+	return cssh.Dial("tcp", cfg.Endpoint(), &config)
+}
+
+func ExecuteSSHShell(cfg SSHConfig) error {
+
+	os.Stdout.Write([]byte{'\n'})
+
+	client, err := SSHClient(cfg)
 	if err != nil {
 		return err
 	}
@@ -187,5 +199,59 @@ func ExecuteSSHShell(endpoint, user, password, identityFile string) error {
 	}
 
 	_ = session.Wait()
+	return nil
+}
+
+func UploadFile(client *ssh.Client, localFile, remotePath string) error {
+	sftpClient, err := sftp.NewClient(client)
+	if err != nil {
+		return fmt.Errorf("failed to create SFTP client: %w", err)
+	}
+	defer sftpClient.Close()
+
+	srcFile, err := os.Open(localFile)
+	if err != nil {
+		return fmt.Errorf("failed to open local file: %w", err)
+	}
+	defer srcFile.Close()
+
+	dstFile, err := sftpClient.Create(remotePath)
+	if err != nil {
+		return fmt.Errorf("failed to create remote file: %w", err)
+	}
+	defer dstFile.Close()
+
+	_, err = dstFile.ReadFrom(srcFile)
+	if err != nil {
+		return fmt.Errorf("failed to copy file content: %w", err)
+	}
+
+	return nil
+}
+
+func DownloadFile(client *ssh.Client, remotePath, localFile string) error {
+	sftpClient, err := sftp.NewClient(client)
+	if err != nil {
+		return fmt.Errorf("failed to create SFTP client: %w", err)
+	}
+	defer sftpClient.Close()
+
+	remoteFile, err := sftpClient.Open(remotePath)
+	if err != nil {
+		return fmt.Errorf("failed to open remote file: %w", err)
+	}
+	defer remoteFile.Close()
+
+	localFileHandle, err := os.Create(localFile)
+	if err != nil {
+		return fmt.Errorf("failed to create local file: %w", err)
+	}
+	defer localFileHandle.Close()
+
+	_, err = io.Copy(localFileHandle, remoteFile)
+	if err != nil {
+		return fmt.Errorf("failed to copy file content: %w", err)
+	}
+
 	return nil
 }
