@@ -34,6 +34,8 @@ wget https://github.com/noboruma/s1h/releases/download/v0.0.1/darwin-arm64.tar.g
 wget https://github.com/noboruma/s1h/releases/download/v0.0.1/darwin-amd64.tar.gz
 wget https://github.com/noboruma/s1h/releases/download/v0.0.1/linux-arm64.tar.gz
 wget https://github.com/noboruma/s1h/releases/download/v0.0.1/linux-amd64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.0.1/windows-arm64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.0.1/windows-amd64.tar.gz
 
 tar xvf chosen.tar.gz
 ```
