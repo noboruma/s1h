@@ -17,7 +17,6 @@ go install github.com/noboruma/s1h/cmd/s1hpass@latest
 ```
 Or from the repository:
 ```
-
 # Or build from the repository source
 git clone https://github.com/noboruma/s1h
 cd s1h
@@ -57,17 +56,17 @@ This command displays a list of available SSH hosts from your `~/.ssh/config`, a
 Let's image you have the following SSH config file (i.e.` ~/.ssh/config`):
 ```
 Host alive-vm
-Hostname *.*,*,*
+Hostname ***.**.**.***
 User root
 IdentiftyFile ~/my-priv-key
 
 Host dead-vm
-Hostname *.*,*,*
+Hostname ****.io
 User root
 IdentiftyFile ~/my-priv-key
 
 Host alive-vm2
-Hostname *.*,*,*
+Hostname ***.***.***.***
 User root
 ```
 Simple execute the following:
