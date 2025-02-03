@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -326,7 +327,16 @@ func searchFilterPopup(fieldName string, pages *tview.Pages, table *tview.Table,
 	pages.AddPage("popup", popup, false, true)
 }
 
+const version = "0.3.0"
+
 func main() {
+	showVersion := flag.Bool("version", false, "Display the version number")
+	flag.Parse()
+	if *showVersion {
+		fmt.Println("Version:", version)
+		return
+	}
+
 	configPath := os.Getenv("SSH_CONFIG")
 	if configPath == "" {
 		configPath = os.Getenv("HOME") + "/.ssh/config"
