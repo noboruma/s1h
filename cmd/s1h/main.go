@@ -40,56 +40,92 @@ func displaySSHConfig(configs []ssh.SSHConfig) {
 		AddItem(sshOutput, 0, 1, false)
 
 	pages := tview.NewPages()
+	root := tview.NewFlex().SetDirection(tview.FlexRow)
 
-	table := tview.NewTable().
-		SetBorders(false)
+	header := tview.NewTable()
+	header.SetCell(0, 0, tview.NewTableCell("Commands").
+		SetTextColor(tcell.ColorYellow).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false))
+	header.SetCell(1, 0, tview.NewTableCell("c:").
+		SetTextColor(tcell.ColorYellow).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false))
+	header.SetCell(1, 1, tview.NewTableCell("Copy local file to selected remote").
+		SetTextColor(tcell.ColorPurple).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false))
+	header.SetCell(2, 0, tview.NewTableCell("<shift>+c:").
+		SetTextColor(tcell.ColorYellow).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false))
+	header.SetCell(2, 1, tview.NewTableCell("Copy from selected remote file to local").
+		SetTextColor(tcell.ColorPurple).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false))
+	header.SetCell(3, 0, tview.NewTableCell("Enter:").
+		SetTextColor(tcell.ColorYellow).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false))
+	header.SetCell(3, 1, tview.NewTableCell("SSH to selected host").
+		SetTextColor(tcell.ColorPurple).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false))
 
-	table.SetSelectable(true, false)
+	tableHeader := tview.NewTable()
+	tableHeader.SetSelectable(false, false)
 
-	table.SetCell(0, 0, tview.NewTableCell("Host (F1)").
+	tableHeader.SetCell(0, 0, tview.NewTableCell("Host (F1)").
 		SetTextColor(tcell.ColorBlue).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	table.SetCell(0, 1, tview.NewTableCell("User").
+	tableHeader.SetCell(0, 1, tview.NewTableCell("User").
 		SetTextColor(tcell.ColorBlueViolet).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	table.SetCell(0, 2, tview.NewTableCell("Port").
+	tableHeader.SetCell(0, 2, tview.NewTableCell("Port").
 		SetTextColor(tcell.ColorGreen).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	table.SetCell(0, 3, tview.NewTableCell("HostName (F4)").
+	tableHeader.SetCell(0, 3, tview.NewTableCell("HostName (F4)").
 		SetTextColor(tcell.ColorRed).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	table.SetCell(0, 4, tview.NewTableCell("Auth").
+	tableHeader.SetCell(0, 4, tview.NewTableCell("Auth").
 		SetTextColor(tcell.ColorBlue).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
 
+	root.AddItem(header, 4, 1, true)
+	root.AddItem(tableHeader, 1, 1, true)
+	root.AddItem(pages, 0, 15, true)
+
+	table := tview.NewTable().
+		SetBorders(false).
+		SetSelectable(true, false)
+
 	for i, config := range configs {
-		table.SetCell(i+1, 0, tview.NewTableCell(config.Host).
+		table.SetCell(i, 0, tview.NewTableCell(config.Host).
 			SetAlign(tview.AlignLeft))
-		table.SetCell(i+1, 1, tview.NewTableCell(config.User).
+		table.SetCell(i, 1, tview.NewTableCell(config.User).
 			SetAlign(tview.AlignLeft))
-		table.SetCell(i+1, 2, tview.NewTableCell(config.Port).
+		table.SetCell(i, 2, tview.NewTableCell(config.Port).
 			SetAlign(tview.AlignLeft))
-		table.SetCell(i+1, 3, tview.NewTableCell(config.HostName).
+		table.SetCell(i, 3, tview.NewTableCell(config.HostName).
 			SetAlign(tview.AlignLeft))
 		if config.Password != "" && config.IdentityFile == "" {
-			table.SetCell(i+1, 4, tview.NewTableCell("Password").
+			table.SetCell(i, 4, tview.NewTableCell("Password").
 				SetAlign(tview.AlignLeft))
 		} else if config.IdentityFile != "" {
-			table.SetCell(i+1, 4, tview.NewTableCell("Key").
+			table.SetCell(i, 4, tview.NewTableCell("Key").
 				SetAlign(tview.AlignLeft))
 		}
 	}
 
 	go reachabilityCheck(configs, table, app)
 
-	//table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.ColorViolet))
 	table.SetSelectedFunc(func(row, column int) {
-		selectedConfig := configs[row-1]
+		selectedConfig := configs[row]
 		if selectedConfig.Password == "" && selectedConfig.IdentityFile == "" {
 			infoPopup(pages, fmt.Sprintf("Missing credentials for Host: %s\nUser: %s\nPort: %s\nHostName: %s\nIdentityFile: %s",
 				selectedConfig.Host,
@@ -219,7 +255,7 @@ func displaySSHConfig(configs []ssh.SSHConfig) {
 
 	pages.AddPage("main", table, true, true)
 
-	if err := app.SetRoot(pages, true).Run(); err != nil {
+	if err := app.SetRoot(root, true).SetFocus(pages).Run(); err != nil {
 		panic(err)
 	}
 }
