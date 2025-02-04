@@ -327,13 +327,13 @@ func searchFilterPopup(fieldName string, pages *tview.Pages, table *tview.Table,
 	pages.AddPage("popup", popup, false, true)
 }
 
-const version = "0.3.0"
+var Version string
 
 func main() {
 	showVersion := flag.Bool("version", false, "Display the version number")
 	flag.Parse()
 	if *showVersion {
-		fmt.Println("Version:", version)
+		fmt.Println("Version:", Version)
 		return
 	}
 
