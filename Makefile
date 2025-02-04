@@ -12,11 +12,11 @@ s1hpass: ./cmd/s1hpass/main.go ./internal/ssh/ssh.go
 	@COMMIT_HASH=$$(git rev-parse --short HEAD); \
 	go build -ldflags="-X main.Version=${VERSION}~$$COMMIT_HASH -s -w" -o s1hpass ./cmd/s1hpass/main.go
 
-release:
-	@COMMIT_HASH=$$(git rev-parse --short HEAD); \
-	./.scripts/release.sh
-
 clean:
 	-rm s1h
 	-rm s1hpass
-	-rm ./*-*.tar.gz
+	-rm -rf dist
+
+release:
+	go install github.com/goreleaser/goreleaser/v2@latest
+	goreleaser release --snapshot --clean
