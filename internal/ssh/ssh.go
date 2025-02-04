@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	cssh "golang.org/x/crypto/ssh"
+	"golang.org/x/term"
 )
 
 type SSHConfig struct {
@@ -153,8 +154,6 @@ func SSHClient(cfg SSHConfig) (*cssh.Client, error) {
 
 func ExecuteSSHShell(cfg SSHConfig) error {
 
-	os.Stdout.Write([]byte{'\n'})
-
 	client, err := SSHClient(cfg)
 	if err != nil {
 		return err
@@ -168,26 +167,19 @@ func ExecuteSSHShell(cfg SSHConfig) error {
 
 	session.Stdout = os.Stdout
 	session.Stderr = os.Stderr
+	session.Stdin = os.Stdin
 
-	sessionStdin, err := session.StdinPipe()
+	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
 		return err
 	}
-	defer sessionStdin.Close()
+	defer term.Restore(int(os.Stdin.Fd()), oldState)
 
-	go func() {
-		reader := bufio.NewReader(os.Stdin)
-		defer session.Close()
-		for {
-			input, err := reader.ReadString('\n')
-			if err != nil {
-				break
-			}
-			sessionStdin.Write([]byte(input))
-		}
-	}()
-
-	err = session.RequestPty("xterm-256color", 80, 40, cssh.TerminalModes{})
+	err = session.RequestPty("xterm-256color", 80, 40, cssh.TerminalModes{
+		ssh.ECHO:          1,
+		ssh.TTY_OP_ISPEED: 14400,
+		ssh.TTY_OP_OSPEED: 14400,
+	})
 	if err != nil {
 		return err
 	}
@@ -262,7 +254,6 @@ func DownloadFile(client *ssh.Client, remotePath, localFile string) error {
 	defer localFileHandle.Close()
 
 	_, err = remoteFile.ReadFromWithConcurrency(localFileHandle, 0)
-	//_, err = io.Copy(localFileHandle, remoteFile)
 	if err != nil {
 		return fmt.Errorf("failed to copy file content: %w", err)
 	}
