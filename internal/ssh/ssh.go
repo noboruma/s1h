@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
 	"os/user"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	cssh "golang.org/x/crypto/ssh"
+	"golang.org/x/term"
 )
 
 type SSHConfig struct {
@@ -175,9 +177,18 @@ func ExecuteSSHShell(cfg SSHConfig) error {
 	}
 	defer sessionStdin.Close()
 
+	signal.Ignore(os.Interrupt)
+	defer signal.Reset(os.Interrupt)
+
+	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		return err
+	}
+
 	go func() {
-		reader := bufio.NewReader(os.Stdin)
+		defer term.Restore(int(os.Stdin.Fd()), oldState)
 		defer session.Close()
+		reader := bufio.NewReader(os.Stdin)
 		for {
 			input, err := reader.ReadString('\n')
 			if err != nil {
@@ -187,7 +198,13 @@ func ExecuteSSHShell(cfg SSHConfig) error {
 		}
 	}()
 
-	err = session.RequestPty("xterm-256color", 80, 40, cssh.TerminalModes{})
+	err = session.RequestPty("xterm-256color", 80, 40, cssh.TerminalModes{
+		ssh.ECHO:          1,
+		ssh.IGNCR:         1,
+		ssh.ISIG:          1,
+		ssh.TTY_OP_ISPEED: 14400,
+		ssh.TTY_OP_OSPEED: 14400,
+	})
 	if err != nil {
 		return err
 	}
@@ -198,6 +215,7 @@ func ExecuteSSHShell(cfg SSHConfig) error {
 	}
 
 	_ = session.Wait()
+	os.Stdin, _ = os.Open("/dev/tty")
 	return nil
 }
 
