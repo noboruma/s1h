@@ -175,7 +175,15 @@ func ExecuteSSHShell(cfg SSHConfig) error {
 	}
 	defer term.Restore(int(os.Stdin.Fd()), oldState)
 
-	err = session.RequestPty("xterm-256color", 80, 40, cssh.TerminalModes{
+	// set terminal size based on current window size
+	width, height, err := term.GetSize(int(os.Stdin.Fd()))
+	if err != nil {
+		// on error set default width and height
+		width = 80
+		height = 40
+	}
+
+	err = session.RequestPty("xterm-256color", height, width, cssh.TerminalModes{
 		ssh.ECHO:          1,
 		ssh.TTY_OP_ISPEED: 14400,
 		ssh.TTY_OP_OSPEED: 14400,
