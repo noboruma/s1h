@@ -178,7 +178,9 @@ func ExecuteSSHShell(cfg SSHConfig) error {
 	// set terminal size based on current window size
 	width, height, err := term.GetSize(int(os.Stdin.Fd()))
 	if err != nil {
-		return err
+		// on error set default width and height
+		width = 80
+		height = 40
 	}
 
 	err = session.RequestPty("xterm-256color", height, width, cssh.TerminalModes{
