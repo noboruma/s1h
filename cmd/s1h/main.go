@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -122,20 +121,11 @@ func displaySSHConfig(configs []ssh.SSHConfig) {
 		}
 	}
 
+	// run periodic reachability check
 	go reachabilityCheck(configs, table, app)
 
 	table.SetSelectedFunc(func(row, column int) {
 		selectedConfig := configs[row]
-		if selectedConfig.Password == "" && selectedConfig.IdentityFile == "" {
-			infoPopup(pages, fmt.Sprintf("Missing credentials for Host: %s\nUser: %s\nPort: %s\nHostName: %s\nIdentityFile: %s",
-				selectedConfig.Host,
-				selectedConfig.User,
-				selectedConfig.Port,
-				selectedConfig.HostName,
-				selectedConfig.IdentityFile))
-			return
-		}
-
 		pages.AddPage("popup", sshPage, true, true)
 		app.Suspend(func() {
 			err := ssh.ExecuteSSHShell(selectedConfig)
@@ -263,15 +253,11 @@ func displaySSHConfig(configs []ssh.SSHConfig) {
 func reachabilityCheck(configs []ssh.SSHConfig, table *tview.Table, app *tview.Application) {
 	for ; ; <-time.After(2 * time.Minute) {
 		for i, config := range configs {
-			port, err := strconv.Atoi(config.Port)
-			if err != nil {
-				port = 22
-			}
 			go func(i int) {
-				if ssh.CheckSSHPort(config.HostName, port, 10*time.Second) {
-					table.GetCell(i+1, 0).SetTextColor(tcell.ColorDarkGreen)
-				} else {
+				if err := config.CheckConnection(10 * time.Second); err != nil {
 					table.GetCell(i+1, 0).SetTextColor(tcell.ColorDarkRed)
+				} else {
+					table.GetCell(i+1, 0).SetTextColor(tcell.ColorDarkGreen)
 				}
 				app.Draw()
 			}(i)
@@ -381,6 +367,10 @@ func main() {
 	configs, err := ssh.ParseSSHConfig(configPath)
 	if err != nil {
 		log.Fatalf("Error loading creds: %v\n", err)
+	}
+
+	for _, config := range configs {
+		go config.CheckConnection(10 * time.Second)
 	}
 
 	for _, cfg := range configs {

@@ -26,8 +26,25 @@ type SSHConfig struct {
 	Password     string
 }
 
-func (c SSHConfig) Endpoint() string {
+func (c *SSHConfig) Endpoint() string {
 	return fmt.Sprintf("%s:%s", c.HostName, c.Port)
+}
+
+func (c *SSHConfig) CheckConnection(timeout time.Duration) error {
+	defaultKeys := []string{"~/.ssh/id_ed25519", "~/.ssh/id_rsa"}
+
+	if c.IdentityFile == "" {
+		for _, key := range defaultKeys {
+			if err := CheckSSHKey(c.Endpoint(), c.User, key, timeout); err == nil {
+				c.IdentityFile = key
+				return nil
+			}
+		}
+	} else {
+		return CheckSSHKey(c.Endpoint(), c.User, c.IdentityFile, timeout)
+	}
+
+	return nil
 }
 
 func ParseSSHConfig(filePath string) ([]SSHConfig, error) {
@@ -52,6 +69,10 @@ func ParseSSHConfig(filePath string) ([]SSHConfig, error) {
 		if strings.HasPrefix(line, "Host ") {
 			if inHostSection {
 				configs = append(configs, currentConfig)
+			}
+			// skip wildcard host
+			if strings.TrimPrefix(line, "Host ") == "*" {
+				continue
 			}
 			currentConfig = SSHConfig{Host: strings.TrimPrefix(line, "Host ")}
 			currentConfig.Port = "22"
@@ -94,14 +115,14 @@ func LoadIdentifyFile(privateKeyPath string) (cssh.Signer, error) {
 	}
 	privateKey, err := os.ReadFile(privateKeyPath)
 	if err != nil {
-		log.Fatalf("Failed to open private key file: %v", err)
+		log.Fatalf("Failed to open private key file %s: %v", privateKeyPath, err)
 	}
 
 	return cssh.ParsePrivateKey(privateKey)
 }
 
 func expandTilde(path string) (string, error) {
-	if path[0] == '~' {
+	if strings.HasPrefix(path, "~") {
 		usr, err := user.Current()
 		if err != nil {
 			return "", err
@@ -122,6 +143,30 @@ func CheckSSHPort(host string, port int, timeout time.Duration) bool {
 	defer conn.Close()
 
 	return true
+}
+
+func CheckSSHKey(host, user, keyFile string, timeout time.Duration) error {
+	signer, err := LoadIdentifyFile(keyFile)
+	if err != nil {
+		return fmt.Errorf("failed to load SSH key: %v", err)
+	}
+
+	config := &ssh.ClientConfig{
+		User: user,
+		Auth: []ssh.AuthMethod{
+			ssh.PublicKeys(signer),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         timeout,
+	}
+
+	client, err := ssh.Dial("tcp", host, config)
+	if err != nil {
+		return fmt.Errorf("failed to connect to host: %v", err)
+	}
+	defer client.Close()
+
+	return nil
 }
 
 func SSHClient(cfg SSHConfig) (*cssh.Client, error) {
