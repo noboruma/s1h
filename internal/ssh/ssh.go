@@ -2,8 +2,9 @@ package ssh
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
-	"log"
+	"io/fs"
 	"net"
 	"os"
 	"os/user"
@@ -87,6 +88,53 @@ func ParseSSHConfig(filePath string) ([]SSHConfig, error) {
 	return configs, nil
 }
 
+func findExistingPrivateKeys() ([]string, error) {
+	sshRoot := "~/.ssh"
+	if os.Getenv("SSH_HOME") != "" {
+		sshRoot = os.Getenv("SSH_HOME")
+	}
+
+	root, err := expandTilde(sshRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	var res []string
+	filepath.Walk(root, func(path string, info fs.FileInfo, err error) error {
+		if !info.IsDir() {
+			for _, v := range []string{"known_hosts", "config", ".pub"} {
+				if strings.HasSuffix(path, v) {
+					return nil
+				}
+			}
+			res = append(res, path)
+		}
+		return nil
+	})
+	return res, nil
+}
+
+func GetDefaultPrivateKeys() []cssh.AuthMethod {
+	var res []cssh.AuthMethod
+
+	defaultKeys, err := findExistingPrivateKeys()
+	if err != nil {
+		fmt.Printf("[warning] failed to find private keys: %v\n", err.Error())
+		return nil
+	}
+
+	for _, key := range defaultKeys {
+		auth, err := LoadIdentifyFile(key)
+		if err != nil {
+			fmt.Printf("[warning] failed to load %s: %v\n", key, err.Error())
+			continue
+		}
+		res = append(res, cssh.PublicKeys(auth))
+	}
+
+	return res
+}
+
 func LoadIdentifyFile(privateKeyPath string) (cssh.Signer, error) {
 	privateKeyPath, err := expandTilde(privateKeyPath)
 	if err != nil {
@@ -94,7 +142,7 @@ func LoadIdentifyFile(privateKeyPath string) (cssh.Signer, error) {
 	}
 	privateKey, err := os.ReadFile(privateKeyPath)
 	if err != nil {
-		log.Fatalf("Failed to open private key file: %v", err)
+		return nil, err
 	}
 
 	return cssh.ParsePrivateKey(privateKey)
@@ -147,6 +195,20 @@ func SSHClient(cfg SSHConfig) (*cssh.Client, error) {
 			},
 			HostKeyCallback: cssh.InsecureIgnoreHostKey(),
 		}
+	} else {
+		def := GetDefaultPrivateKeys()
+		for _, auth := range def {
+			config = cssh.ClientConfig{
+				User:            cfg.User,
+				Auth:            []cssh.AuthMethod{auth},
+				HostKeyCallback: cssh.InsecureIgnoreHostKey(),
+			}
+			c, err := cssh.Dial("tcp", cfg.Endpoint(), &config)
+			if c != nil {
+				return c, err
+			}
+		}
+		return nil, errors.New("no key found")
 	}
 
 	return cssh.Dial("tcp", cfg.Endpoint(), &config)

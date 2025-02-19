@@ -126,15 +126,6 @@ func displaySSHConfig(configs []ssh.SSHConfig) {
 
 	table.SetSelectedFunc(func(row, column int) {
 		selectedConfig := configs[row]
-		if selectedConfig.Password == "" && selectedConfig.IdentityFile == "" {
-			infoPopup(pages, fmt.Sprintf("Missing credentials for Host: %s\nUser: %s\nPort: %s\nHostName: %s\nIdentityFile: %s",
-				selectedConfig.Host,
-				selectedConfig.User,
-				selectedConfig.Port,
-				selectedConfig.HostName,
-				selectedConfig.IdentityFile))
-			return
-		}
 
 		pages.AddPage("popup", sshPage, true, true)
 		app.Suspend(func() {
