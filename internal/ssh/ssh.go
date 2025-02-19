@@ -54,6 +54,10 @@ func ParseSSHConfig(filePath string) ([]SSHConfig, error) {
 			if inHostSection {
 				configs = append(configs, currentConfig)
 			}
+			// skip if host has * in it
+			if strings.Contains(line, "*") {
+				continue
+			}
 			currentConfig = SSHConfig{Host: strings.TrimPrefix(line, "Host ")}
 			currentConfig.Port = "22"
 			inHostSection = true
