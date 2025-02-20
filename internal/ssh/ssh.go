@@ -281,11 +281,10 @@ func UploadFile(client *ssh.Client, localFile, remotePath string) error {
 	defer srcFile.Close()
 
 	info, err := sftpClient.Stat(remotePath)
-	if err != nil {
-		return err
-	}
-	if info.IsDir() {
-		remotePath = filepath.Join(remotePath, filepath.Base(localFile))
+	if err == nil {
+		if info.IsDir() {
+			remotePath = filepath.Join(localFile, filepath.Base(remotePath))
+		}
 	}
 	dstFile, err := sftpClient.Create(remotePath)
 	if err != nil {
@@ -315,11 +314,10 @@ func DownloadFile(client *ssh.Client, remotePath, localFile string) error {
 	defer remoteFile.Close()
 
 	info, err := os.Stat(localFile)
-	if err != nil {
-		return err
-	}
-	if info.IsDir() {
-		localFile = filepath.Join(localFile, filepath.Base(remotePath))
+	if err == nil {
+		if info.IsDir() {
+			localFile = filepath.Join(localFile, filepath.Base(remotePath))
+		}
 	}
 	localFileHandle, err := os.Create(localFile)
 	if err != nil {
@@ -327,7 +325,7 @@ func DownloadFile(client *ssh.Client, remotePath, localFile string) error {
 	}
 	defer localFileHandle.Close()
 
-	_, err = remoteFile.ReadFromWithConcurrency(localFileHandle, 0)
+	_, err = remoteFile.WriteTo(localFileHandle)
 	if err != nil {
 		return fmt.Errorf("failed to copy file content: %w", err)
 	}
