@@ -17,6 +17,7 @@ var Version string
 const (
 	masterKeyFileName = "master.key"
 	credsFileName     = "credentials.enc"
+	historyFileName   = "history"
 )
 
 func main() {
@@ -31,18 +32,13 @@ func main() {
 	if len(os.Args) == 1 {
 		startMainTUI()
 	} else {
-		updateCmd := flag.NewFlagSet("upsert", flag.ExitOnError)
-		removeCmd := flag.NewFlagSet("remove", flag.ExitOnError)
-
-		var hostname, password string
-		updateCmd.StringVar(&hostname, "hostname", "", "The hostname to update")
-		updateCmd.StringVar(&password, "password", "", "The password to set for the hostname")
-
-		removeCmd.StringVar(&hostname, "hostname", "", "The hostname to remove")
-
-		key, credsFile := createAndLoadLocalEncryptedFile()
+		key, credsFile := loadOrStoreLocalEncryptedFile()
 		switch os.Args[1] {
 		case "upsert":
+			var hostname, password string
+			updateCmd := flag.NewFlagSet("upsert", flag.ExitOnError)
+			updateCmd.StringVar(&hostname, "hostname", "", "The hostname to update")
+			updateCmd.StringVar(&password, "password", "", "The password to set for the hostname")
 			updateCmd.Parse(os.Args[2:])
 			if hostname == "" || password == "" {
 				fmt.Println("Please provide both hostname and password.")
@@ -58,6 +54,9 @@ func main() {
 			fmt.Println("Credentials updated.")
 			return
 		case "remove":
+			var hostname string
+			removeCmd := flag.NewFlagSet("remove", flag.ExitOnError)
+			removeCmd.StringVar(&hostname, "hostname", "", "The hostname to remove")
 			removeCmd.Parse(os.Args[2:])
 			if hostname == "" {
 				fmt.Println("Please provide the hostname to remove.")
@@ -90,14 +89,20 @@ func startMainTUI() {
 		log.Fatalf("Error loading creds: %v\n", err)
 	}
 
-	tui.PopulateAutocompleteCaches(configs)
-
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		log.Fatalf("Error loading creds: %v\n", err)
 	}
+
 	masterKeyFile := filepath.Join(configDir, masterKeyFileName)
 	credsFile := filepath.Join(configDir, credsFileName)
+	historyFile := filepath.Join(configDir, historyFileName)
+
+	tui.PopulateAutocompleteCaches(configs)
+	err = ssh.LoadSCPHistory(historyFile)
+	if err != nil {
+		log.Fatalf("Error loading scp history")
+	}
 
 	var creds credentials.Credentials
 	key, err := credentials.LoadMasterKey(masterKeyFile)
@@ -112,14 +117,14 @@ func startMainTUI() {
 	tui.DisplaySSHConfig(configs)
 }
 
-func createAndLoadLocalEncryptedFile() ([]byte, string) {
+func loadOrStoreLocalEncryptedFile() ([]byte, string) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		fmt.Println("Cannot access config dir: ", err.Error())
 		os.Exit(1)
 	}
-	masterKeyFile := filepath.Join(configDir, "master.key")
-	credsFile := filepath.Join(configDir, "credentials.enc")
+	masterKeyFile := filepath.Join(configDir, masterKeyFileName)
+	credsFile := filepath.Join(configDir, credsFileName)
 
 	_, err = os.Stat(masterKeyFile)
 	if err != nil {
