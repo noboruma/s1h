@@ -25,18 +25,6 @@ builds:
     goarch:
       - amd64
       - arm64
-  - id: sh1pass
-    env:
-      - CGO_ENABLED=0
-    main: ./cmd/s1hpass/main.go
-    binary: sh1pass
-    goos:
-      - linux
-      - windows
-      - darwin
-    goarch:
-      - amd64
-      - arm64
 
 archives:
   - formats: [tar.gz]
