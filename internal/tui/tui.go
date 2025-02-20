@@ -270,9 +270,9 @@ func reachabilityCheck(configs []ssh.SSHConfig, table *tview.Table, app *tview.A
 			}
 			go func(i int) {
 				if ssh.CheckSSHPort(config.HostName, port, 10*time.Second) {
-					table.GetCell(i+1, 0).SetTextColor(tcell.ColorDarkGreen)
+					table.GetCell(i, 0).SetTextColor(tcell.ColorDarkGreen)
 				} else {
-					table.GetCell(i+1, 0).SetTextColor(tcell.ColorDarkRed)
+					table.GetCell(i, 0).SetTextColor(tcell.ColorDarkRed)
 				}
 				app.Draw()
 			}(i)
@@ -343,7 +343,7 @@ func searchFilterPopup(fieldName string, pages *tview.Pages, table *tview.Table,
 		if hostname != "" {
 			for i, cfg := range configs {
 				if match(cfg, hostname) {
-					table.Select(i+1, 0)
+					table.Select(i, 0)
 					break
 				}
 			}
