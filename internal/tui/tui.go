@@ -168,7 +168,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 				return event
 			}
 			row, _ := table.GetSelection()
-			selectedConfig := configs[row-1]
+			selectedConfig := configs[row]
 			client, err := ssh.SSHClient(selectedConfig)
 			if err != nil {
 				infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
@@ -211,7 +211,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 				return event
 			}
 			row, _ := table.GetSelection()
-			selectedConfig := configs[row-1]
+			selectedConfig := configs[row]
 			client, err := ssh.SSHClient(selectedConfig)
 			if err != nil {
 				infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
