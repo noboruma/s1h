@@ -1,10 +1,7 @@
 # s1h: ssh + scp in one unified TUI
 
 `s1h` is a simple TUI inspired by [K9s](https://github.com/derailed/k9s).
-This repository contains two command-line tools written in Golang:
-
-1. **s1h** - Quickly SSH/SCP into configured hosts defined in your ssh config file.
-2. **s1hpass** - Manage credentials securely. Used for key-less access.
+`s1h` allows you to quickly ssh/scp into configured hosts, via either passwords stored & encrypted locally, or by private keys.
 
 ## Installation
 
@@ -12,7 +9,6 @@ From go:
 ```sh
 # Install from Go directly:
 go install github.com/noboruma/s1h/cmd/s1h@latest
-go install github.com/noboruma/s1h/cmd/s1hpass@latest
 
 ```
 Or from the repository:
@@ -90,16 +86,12 @@ You can search hosts or hostname using repectively `F1` amd `F4` to jump directl
 - If you press `C` it will give the option to download a file from the selected host:
 ![main output](.github/assets/download.png)
 
-### s1hpass
+### What about password?
 
-The `s1hpass` tool provides options to create an encryption key and update username-password pairs securely. This is useful for host that requires password instead of a key.
+The `s1h` tool provides options to create an encryption key and update username-password pairs securely. This is useful for host that requires password instead of a key.
+The encrypted file and the key are stored in the `$HOME/.config/s1h` folder, and can be safely transferred across computer. For maximum security, put your key in a different place.
 
 #### Usage:
-
-```sh
-s1hpass create-key
-```
-This command generates a new encryption key for securing credentials stored locally.
 
 ```sh
 s1hpass upsert <host> <password>
@@ -108,10 +100,7 @@ This updates the stored credentials for the specified ssh host.
 
 #### Example:
 
-```sh
-s1hpass create-key
-# Output: Master key saved to ~/.config/s1h/master.key
-
+```
 s1hpass upsert remote-vm mySecureP@ss
 # Output: Credentials updated.
 
