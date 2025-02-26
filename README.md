@@ -86,6 +86,14 @@ You can search hosts or hostname using repectively `F1` amd `F4` to jump directl
 - If you press `C` it will give the option to download a file from the selected host:
 ![main output](.github/assets/download.png)
 
+### CLI mode
+
+It is also possible to use s1h as a CLI to copy files around:
+```
+s1h cp [hos1:]/path1 [hos2:]/path2
+```
+Which might be more convenient if you rely on shell history to pass things around.
+
 ### What about password?
 
 The `s1h` tool provides options to create an encryption key and update username-password pairs securely. This is useful for host that requires password instead of a key.
