@@ -283,12 +283,12 @@ func UploadFile(client *ssh.Client, localFile, remotePath string) error {
 	info, err := sftpClient.Stat(remotePath)
 	if err == nil {
 		if info.IsDir() {
-			remotePath = filepath.Join(localFile, filepath.Base(remotePath))
+			remotePath = filepath.Join(remotePath, filepath.Base(localFile))
 		}
 	}
 	dstFile, err := sftpClient.Create(remotePath)
 	if err != nil {
-		return fmt.Errorf("failed to create remote file: %w", err)
+		return fmt.Errorf("failed to create remote file %s: %w", remotePath, err)
 	}
 	defer dstFile.Close()
 

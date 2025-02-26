@@ -65,6 +65,10 @@ func main() {
 			removeCmd := flag.NewFlagSet("remove", flag.ExitOnError)
 			removeCmd.StringVar(&hostname, "hostname", "", "The hostname to remove")
 			err := removeCmd.Parse(os.Args[2:])
+			if err != nil {
+				fmt.Println("Error remote:", err)
+				os.Exit(1)
+			}
 			if hostname == "" {
 				fmt.Println("Please provide the hostname to remove.")
 				os.Exit(1)
@@ -88,6 +92,17 @@ func main() {
 			}
 			configs := loadConfigs()
 			err := cli.Copy(configs, os.Args[2], os.Args[3])
+			if err != nil {
+				fmt.Println("Error while copying: ", err.Error())
+				os.Exit(1)
+			}
+		case "shell":
+			if len(os.Args) != 3 {
+				fmt.Println("Missing args: s1h shell host")
+				os.Exit(1)
+			}
+			configs := loadConfigs()
+			err := cli.Shell(configs, os.Args[2])
 			if err != nil {
 				fmt.Println("Error while copying: ", err.Error())
 				os.Exit(1)

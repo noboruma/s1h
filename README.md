@@ -88,11 +88,13 @@ You can search hosts or hostname using repectively `F1` amd `F4` to jump directl
 
 ### CLI mode
 
-It is also possible to use s1h as a CLI to copy files around:
+It is also possible to use `s1h` as a CLI to shell and copy files.
+This approach might be more convenient if you rely on shell history to pass things around.
+Mostly this approach helps with password managements.
 ```
 s1h cp [hos1:]/path1 [hos2:]/path2
+s1h shell hos1
 ```
-Which might be more convenient if you rely on shell history to pass things around.
 
 ### What about password?
 
