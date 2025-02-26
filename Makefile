@@ -14,4 +14,4 @@ clean:
 
 release:
 	go install github.com/goreleaser/goreleaser/v2@latest
-	goreleaser release --snapshot --clean
+	goreleaser release --clean
