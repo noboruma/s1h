@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/noboruma/s1h/internal/credentials"
 	"github.com/noboruma/s1h/internal/ssh"
 	"github.com/rivo/tview"
 )
@@ -321,13 +320,6 @@ func infoPopup(pages *tview.Pages, msg string) {
 			pages.RemovePage("popup")
 		})
 	pages.AddPage("popup", popup, false, true)
-}
-
-func PopulateCredentialsToConfig(creds credentials.Credentials, configs []ssh.SSHConfig) {
-	for i, cfg := range configs {
-		cfg.Password = creds.Entries[cfg.Host]
-		configs[i] = cfg
-	}
 }
 
 func searchFilterPopup(fieldName string, pages *tview.Pages, table *tview.Table,

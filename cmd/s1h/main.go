@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/noboruma/s1h/internal/cli"
+	"github.com/noboruma/s1h/internal/config"
 	"github.com/noboruma/s1h/internal/credentials"
 	"github.com/noboruma/s1h/internal/ssh"
 	"github.com/noboruma/s1h/internal/tui"
@@ -30,7 +32,8 @@ func main() {
 	}
 
 	if len(os.Args) == 1 {
-		startMainTUI()
+		configs := loadConfigs()
+		startMainTUI(configs)
 	} else {
 		key, credsFile := loadOrStoreLocalEncryptedFile()
 		switch os.Args[1] {
@@ -39,13 +42,17 @@ func main() {
 			updateCmd := flag.NewFlagSet("upsert", flag.ExitOnError)
 			updateCmd.StringVar(&hostname, "hostname", "", "The hostname to update")
 			updateCmd.StringVar(&password, "password", "", "The password to set for the hostname")
-			updateCmd.Parse(os.Args[2:])
+			err := updateCmd.Parse(os.Args[2:])
+			if err != nil {
+				fmt.Println("Error upading credentials:", err.Error())
+				os.Exit(1)
+			}
 			if hostname == "" || password == "" {
 				fmt.Println("Please provide both hostname and password.")
 				os.Exit(1)
 			}
 
-			err := credentials.UpsertCredentials(credsFile, hostname, password, key)
+			err = credentials.UpsertCredentials(credsFile, hostname, password, key)
 			if err != nil {
 				fmt.Println("Error updating credentials:", err)
 				os.Exit(1)
@@ -57,13 +64,16 @@ func main() {
 			var hostname string
 			removeCmd := flag.NewFlagSet("remove", flag.ExitOnError)
 			removeCmd.StringVar(&hostname, "hostname", "", "The hostname to remove")
-			removeCmd.Parse(os.Args[2:])
+			err := removeCmd.Parse(os.Args[2:])
 			if hostname == "" {
 				fmt.Println("Please provide the hostname to remove.")
 				os.Exit(1)
 			}
-
-			err := credentials.RemoveCredentials(credsFile, hostname, key)
+			err = credentials.RemoveCredentials(credsFile, hostname, key)
+			if err != nil {
+				fmt.Println("Error removing credentials:", err.Error())
+				os.Exit(1)
+			}
 			if err != nil {
 				fmt.Println("Error removing credentials:", err)
 				os.Exit(1)
@@ -71,6 +81,17 @@ func main() {
 
 			fmt.Println("Credentials removed.")
 			return
+		case "cp":
+			if len(os.Args) != 4 || os.Args[2] == "" || os.Args[3] == "" {
+				fmt.Println("Missing args: s1h cp [host1:]/path1 [host2:]path2")
+				os.Exit(1)
+			}
+			configs := loadConfigs()
+			err := cli.Copy(configs, os.Args[2], os.Args[3])
+			if err != nil {
+				fmt.Println("Error while copying: ", err.Error())
+				os.Exit(1)
+			}
 		default:
 			fmt.Println("Unknown command. Expected 'upsert' or 'remove'.")
 			os.Exit(1)
@@ -78,7 +99,7 @@ func main() {
 	}
 }
 
-func startMainTUI() {
+func loadConfigs() []ssh.SSHConfig {
 	configPath := os.Getenv("SSH_CONFIG")
 	if configPath == "" {
 		configPath = os.Getenv("HOME") + "/.ssh/config"
@@ -96,13 +117,6 @@ func startMainTUI() {
 
 	masterKeyFile := filepath.Join(configDir, masterKeyFileName)
 	credsFile := filepath.Join(configDir, credsFileName)
-	historyFile := filepath.Join(configDir, historyFileName)
-
-	tui.PopulateAutocompleteCaches(configs)
-	err = ssh.LoadSCPHistory(historyFile)
-	if err != nil {
-		log.Fatalf("Error loading scp history")
-	}
 
 	var creds credentials.Credentials
 	key, err := credentials.LoadMasterKey(masterKeyFile)
@@ -111,7 +125,24 @@ func startMainTUI() {
 		if err != nil {
 			log.Fatalf("Error loading creds: %v\n", err)
 		}
-		tui.PopulateCredentialsToConfig(creds, configs)
+		config.PopulateCredentialsToConfig(creds, configs)
+	}
+	return configs
+}
+
+func startMainTUI(configs []ssh.SSHConfig) {
+
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		log.Fatalf("Error loading creds: %v\n", err)
+	}
+
+	historyFile := filepath.Join(configDir, historyFileName)
+
+	tui.PopulateAutocompleteCaches(configs)
+	err = ssh.LoadSCPHistory(historyFile)
+	if err != nil {
+		log.Fatalf("Error loading scp history")
 	}
 
 	tui.DisplaySSHConfig(configs)
