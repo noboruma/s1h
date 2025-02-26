@@ -26,12 +26,12 @@ Or download the binaries directly (choose your os/arch):
 
 ```
 # download the binaries from the release
-wget https://github.com/noboruma/s1h/releases/download/v0.0.1/darwin-arm64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.0.1/darwin-amd64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.0.1/linux-arm64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.0.1/linux-amd64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.0.1/windows-arm64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.0.1/windows-amd64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.2.1/s1h_Darwin_arm64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.2.1/s1h_Darwin_x86_64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.2.1/s1h_Linux_arm64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.2.1/s1h_Linux_x86_64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.2.1/s1h_Windows_arm64.zip
+wget https://github.com/noboruma/s1h/releases/download/v0.2.1/s1h_Windows_x86_64.zip
 
 tar xvf chosen.tar.gz
 ```
@@ -104,17 +104,17 @@ The encrypted file and the key are stored in the `$HOME/.config/s1h` folder, and
 #### Usage:
 
 ```sh
-s1hpass upsert <host> <password>
+s1h upsert <host> <password>
 ```
 This updates the stored credentials for the specified ssh host.
 
 #### Example:
 
 ```
-s1hpass upsert remote-vm mySecureP@ss
+s1h upsert remote-vm mySecureP@ss
 # Output: Credentials updated.
 
-s1hpass remove remote-vm
+s1h remove remote-vm
 # Output: Credentials removed.
 ```
 
