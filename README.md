@@ -26,12 +26,12 @@ Or download the binaries directly (choose your os/arch):
 
 ```
 # download the binaries from the release
-wget https://github.com/noboruma/s1h/releases/download/v0.2.1/s1h_Darwin_arm64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.2.1/s1h_Darwin_x86_64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.2.1/s1h_Linux_arm64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.2.1/s1h_Linux_x86_64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.2.1/s1h_Windows_arm64.zip
-wget https://github.com/noboruma/s1h/releases/download/v0.2.1/s1h_Windows_x86_64.zip
+wget https://github.com/noboruma/s1h/releases/download/v0.3.0/s1h_Darwin_arm64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.3.0/s1h_Darwin_x86_64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.3.0/s1h_Linux_arm64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.3.0/s1h_Linux_x86_64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.3.0/s1h_Windows_arm64.zip
+wget https://github.com/noboruma/s1h/releases/download/v0.3.0/s1h_Windows_x86_64.zip
 
 tar xvf chosen.tar.gz
 ```
@@ -47,7 +47,9 @@ The `s1h` tool reads the SSH config file and allows you to select a host to SSH 
 ```sh
 s1h
 ```
-This command displays a list of available SSH hosts from your `~/.ssh/config`, allowing you to select one and connect. It also allows you to use scp commands.
+This command displays a list of available SSH hosts from your `~/.ssh/config`, allowing you to select one and connect. It also allows you to execute simple shell commands & scp commands across one or multiple hosts.
+
+![main header](.github/assets/header.png)
 
 #### Example:
 
@@ -80,11 +82,17 @@ You can search hosts or hostname using repectively `F1` amd `F4` to jump directl
 
 - If you press `enter` and it will automatically use the configured authentication method (password or SSH key) to establish the connection. This opens a new shell on the remote host.
 
-- If you press `c` it will give the option to upload a file to the selected host:
+- If you press `c` it will give the option to upload a file to one or multiple selected host:
 ![main output](.github/assets/upload.png)
 
-- If you press `C` it will give the option to download a file from the selected host:
+- If you press `C` it will give the option to download a file from one or multiple selected host:
 ![main output](.github/assets/download.png)
+
+- If you press `m` it will select the current entry for multi selection.
+
+- If you press `M` it will deselect everything.
+
+- If you press `e` you can execute a simple command to one or multiple selected host.
 
 ### CLI mode
 
