@@ -332,3 +332,12 @@ func DownloadFile(client *ssh.Client, remotePath, localFile string) error {
 
 	return nil
 }
+
+func ExecCommand(client *ssh.Client, command string) error {
+	sess, err := client.NewSession()
+	if err != nil {
+		return err
+	}
+	defer sess.Close()
+	return sess.Run(command)
+}

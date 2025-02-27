@@ -11,6 +11,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/noboruma/s1h/internal/ssh"
 	"github.com/rivo/tview"
+	cssh "golang.org/x/crypto/ssh"
 )
 
 var (
@@ -69,7 +70,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 		SetTextColor(tcell.ColorYellow).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	header.SetCell(3, 1, tview.NewTableCell("SSH to selected host").
+	header.SetCell(3, 1, tview.NewTableCell("Shell to selected host").
 		SetTextColor(tcell.ColorPurple).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
@@ -81,8 +82,24 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 		SetTextColor(tcell.ColorPurple).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
+	header.SetCell(5, 0, tview.NewTableCell("M:").
+		SetTextColor(tcell.ColorBlue).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false))
+	header.SetCell(5, 1, tview.NewTableCell("Clear all multi selected host").
+		SetTextColor(tcell.ColorPurple).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false))
+	header.SetCell(6, 0, tview.NewTableCell("e:").
+		SetTextColor(tcell.ColorYellow).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false))
+	header.SetCell(6, 1, tview.NewTableCell("Execute short-lived command").
+		SetTextColor(tcell.ColorPurple).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false))
 
-	root.AddItem(header, 5, 2, false)
+	root.AddItem(header, 7, 2, false)
 	root.AddItem(pages, 0, 15, true)
 
 	table := tview.NewTable().
@@ -174,44 +191,13 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 			if pages.HasPage("popup") {
 				return event
 			}
-			row, _ := table.GetSelection()
-			selectedConfig := configs[row-tableHeaderSize]
-			client, err := ssh.SSHClient(selectedConfig)
-			if err != nil {
-				infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
-					selectedConfig.Host, err))
-				return nil
+			if len(multiSelectConfigs) != 0 {
+				multiCopyTo(pages, multiSelectConfigs)
+			} else {
+				row, _ := table.GetSelection()
+				selectedConfig := configs[row-tableHeaderSize]
+				singleCopyTo(pages, selectedConfig)
 			}
-			prevValues := ssh.GetSCPUploadEntry(selectedConfig.Host)
-			popup := tview.NewForm()
-			fromField := tview.NewInputField().SetFieldWidth(256).SetText(prevValues.From)
-			fromField.SetLabel("From (local): ").
-				SetAutocompleteFunc(DirAutocomplete)
-			toField := tview.NewInputField().SetFieldWidth(256).SetText(prevValues.To)
-			toField.SetLabel("To (remote): ")
-
-			popup.AddFormItem(fromField)
-			popup.AddFormItem(toField)
-			popup.AddButton("Upload", func() {
-				ssh.PutSCPUploadEntry(selectedConfig.Host, ssh.SCPHistoryEntry{
-					From: fromField.GetText(),
-					To:   toField.GetText(),
-				})
-				err := ssh.UploadFile(client, fromField.GetText(), toField.GetText())
-				pages.RemovePage("popup")
-				if err != nil {
-					infoPopup(pages,
-						fmt.Sprintf("Error uploading %s -> %s: %v",
-							fromField.GetText(),
-							toField.GetText(), err))
-				} else {
-					infoPopup(pages, "Successfully uploaded")
-				}
-			})
-			popup.SetCancelFunc(func() {
-				pages.RemovePage("popup")
-			})
-			pages.AddPage("popup", popup, true, true)
 			return nil
 		case 'C': // copy from
 			if pages.HasPage("popup") {
@@ -258,6 +244,9 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 			pages.AddPage("popup", popup, true, true)
 			return nil
 		case 'm':
+			if pages.HasPage("popup") {
+				return event
+			}
 			row, _ := table.GetSelection()
 			selectedConfig := configs[row-tableHeaderSize]
 
@@ -275,6 +264,32 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 				multiSelectConfigs = append(multiSelectConfigs, selectedConfig)
 				table.GetCell(row, 0).SetBackgroundColor(tcell.ColorBlue)
 			}
+		case 'M':
+			if pages.HasPage("popup") {
+				return event
+			}
+			for i := range multiSelectConfigs {
+				for row := 1; row < table.GetRowCount(); row++ {
+					selectedConfig := configs[row]
+					if multiSelectConfigs[i].Host == selectedConfig.Host {
+						table.GetCell(row, 0).SetBackgroundColor(tcell.ColorNone)
+						break
+					}
+				}
+			}
+			multiSelectConfigs = multiSelectConfigs[:0]
+		case 'e':
+			if pages.HasPage("popup") {
+				return event
+			}
+			if len(multiSelectConfigs) != 0 {
+				multiExecOn(pages, multiSelectConfigs)
+			} else {
+				row, _ := table.GetSelection()
+				selectedConfig := configs[row-tableHeaderSize]
+				singleExecOn(pages, selectedConfig)
+			}
+			return nil
 		}
 		return event
 	})
@@ -380,4 +395,164 @@ func searchFilterPopup(fieldName string, pages *tview.Pages, table *tview.Table,
 		return res
 	}).SetFieldWidth(42)
 	pages.AddPage("popup", popup, false, true)
+}
+
+func singleCopyTo(pages *tview.Pages, selectedConfig ssh.SSHConfig) {
+	client, err := ssh.SSHClient(selectedConfig)
+	if err != nil {
+		infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
+			selectedConfig.Host, err))
+		return
+	}
+	prevValues := ssh.GetSCPUploadEntry(selectedConfig.Host)
+	popup := tview.NewForm()
+	fromField := tview.NewInputField().SetFieldWidth(256).SetText(prevValues.From)
+	fromField.SetLabel("From (local): ").
+		SetAutocompleteFunc(DirAutocomplete)
+	toField := tview.NewInputField().SetFieldWidth(256).SetText(prevValues.To)
+	toField.SetLabel("To (remote): ")
+
+	popup.AddFormItem(fromField)
+	popup.AddFormItem(toField)
+	popup.AddButton("Upload", func() {
+		ssh.PutSCPUploadEntry(selectedConfig.Host, ssh.SCPHistoryEntry{
+			From: fromField.GetText(),
+			To:   toField.GetText(),
+		})
+		err := ssh.UploadFile(client, fromField.GetText(), toField.GetText())
+		pages.RemovePage("popup")
+		if err != nil {
+			infoPopup(pages,
+				fmt.Sprintf("Error uploading %s -> %s: %v",
+					fromField.GetText(),
+					toField.GetText(), err))
+		} else {
+			infoPopup(pages, "Successfully uploaded")
+		}
+	})
+	popup.SetCancelFunc(func() {
+		pages.RemovePage("popup")
+	})
+	pages.AddPage("popup", popup, true, true)
+}
+
+func multiCopyTo(pages *tview.Pages, selectedConfigs []ssh.SSHConfig) {
+	var clients []*cssh.Client
+	for i := range selectedConfigs {
+		client, err := ssh.SSHClient(selectedConfigs[i])
+		if err != nil {
+			infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
+				selectedConfigs[i].Host, err))
+			return
+		}
+		clients = append(clients, client)
+	}
+
+	prevValues := ssh.GetSCPUploadEntry(selectedConfigs[0].Host)
+	popup := tview.NewForm()
+	fromField := tview.NewInputField().SetFieldWidth(256).SetText(prevValues.From)
+	fromField.SetLabel("From (local): ").
+		SetAutocompleteFunc(DirAutocomplete)
+	toField := tview.NewInputField().SetFieldWidth(256).SetText(prevValues.To)
+	toField.SetLabel("To (multiple remotes): ")
+
+	popup.AddFormItem(fromField)
+	popup.AddFormItem(toField)
+
+	popup.AddButton("Upload", func() {
+		for i := range clients {
+			ssh.PutSCPUploadEntry(selectedConfigs[i].Host, ssh.SCPHistoryEntry{
+				From: fromField.GetText(),
+				To:   toField.GetText(),
+			})
+			err := ssh.UploadFile(clients[i], fromField.GetText(), toField.GetText())
+			if err != nil {
+				infoPopup(pages,
+					fmt.Sprintf("Error uploading %s -> %s: %v",
+						fromField.GetText(),
+						toField.GetText(), err))
+			}
+		}
+		pages.RemovePage("popup")
+	})
+	popup.SetCancelFunc(func() {
+		pages.RemovePage("popup")
+	})
+	pages.AddPage("popup", popup, true, true)
+}
+
+func singleExecOn(pages *tview.Pages, selectedConfig ssh.SSHConfig) {
+	client, err := ssh.SSHClient(selectedConfig)
+	if err != nil {
+		infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
+			selectedConfig.Host, err))
+		return
+	}
+	prevValues := ssh.GetExecEntry(selectedConfig.Host)
+	popup := tview.NewForm()
+	cmdField := tview.NewInputField().SetFieldWidth(256).SetText(prevValues.Command)
+	cmdField.SetLabel("Command: ").
+		SetAutocompleteFunc(DirAutocomplete)
+	popup.AddFormItem(cmdField)
+	popup.AddButton("Execute", func() {
+		ssh.PutExecEntry(selectedConfig.Host, ssh.ExecHistoryEntry{
+			Command: cmdField.GetText(),
+		})
+		err := ssh.ExecCommand(client, cmdField.GetText())
+		pages.RemovePage("popup")
+		if err != nil {
+			infoPopup(pages,
+				fmt.Sprintf("Error executing %s on %s: %v",
+					cmdField.GetText(),
+					selectedConfig.Host,
+					err))
+		} else {
+			infoPopup(pages, "Successfully uploaded")
+		}
+	})
+	popup.SetCancelFunc(func() {
+		pages.RemovePage("popup")
+	})
+	pages.AddPage("popup", popup, true, true)
+}
+
+func multiExecOn(pages *tview.Pages, selectedConfigs []ssh.SSHConfig) {
+	var clients []*cssh.Client
+	for i := range selectedConfigs {
+		client, err := ssh.SSHClient(selectedConfigs[i])
+		if err != nil {
+			infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
+				selectedConfigs[i].Host, err))
+			return
+		}
+		clients = append(clients, client)
+	}
+
+	prevValues := ssh.GetExecEntry(selectedConfigs[0].Host)
+	popup := tview.NewForm()
+	cmdField := tview.NewInputField().SetFieldWidth(256).SetText(prevValues.Command)
+	cmdField.SetLabel("Command: ").
+		SetAutocompleteFunc(DirAutocomplete)
+	popup.AddFormItem(cmdField)
+
+	popup.AddButton("Execute on all", func() {
+		for i := range clients {
+			ssh.PutExecEntry(selectedConfigs[i].Host, ssh.ExecHistoryEntry{
+				Command: cmdField.GetText(),
+			})
+			err := ssh.ExecCommand(clients[i], cmdField.GetText())
+			if err != nil {
+				infoPopup(pages,
+					fmt.Sprintf("Error executing %s on %s: %v",
+						cmdField.GetText(),
+						selectedConfigs[i].Host,
+						err))
+			}
+		}
+		pages.RemovePage("popup")
+	})
+	popup.SetCancelFunc(func() {
+		pages.RemovePage("popup")
+	})
+	pages.AddPage("popup", popup, true, true)
 }
