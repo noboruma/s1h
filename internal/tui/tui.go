@@ -17,7 +17,7 @@ import (
 var (
 	autoCompleteHostNames []string
 	autoCompleteHosts     []string
-	multiSelectConfigs []ssh.SSHConfig
+	multiSelectConfigs    []ssh.SSHConfig
 )
 
 func PopulateAutocompleteCaches(configs []ssh.SSHConfig) {
@@ -184,7 +184,9 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 		}
 		switch event.Rune() {
 		case 'q':
-			if !pages.HasPage("popup") {
+			if pages.HasPage("popup") {
+				pages.RemovePage("popup")
+			} else {
 				app.Stop()
 			}
 		case 'c': // copy to
@@ -203,45 +205,13 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 			if pages.HasPage("popup") {
 				return event
 			}
-			row, _ := table.GetSelection()
-			selectedConfig := configs[row-tableHeaderSize]
-			client, err := ssh.SSHClient(selectedConfig)
-			if err != nil {
-				infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
-					selectedConfig.Host, err))
-				return nil
+			if len(multiSelectConfigs) != 0 {
+				multiCopyFrom(pages, multiSelectConfigs)
+			} else {
+				row, _ := table.GetSelection()
+				selectedConfig := configs[row-tableHeaderSize]
+				singleCopyFrom(pages, selectedConfig)
 			}
-			prevValues := ssh.GetSCPDownloadEntry(selectedConfig.Host)
-			popup := tview.NewForm()
-			fromField := tview.NewInputField()
-			fromField.SetLabel("From (remote): ").SetFieldWidth(256).SetText(prevValues.From)
-
-			toField := tview.NewInputField().SetFieldWidth(256).SetText(prevValues.To)
-			toField.SetLabel("To (local): ").
-				SetAutocompleteFunc(DirAutocomplete)
-
-			popup.AddFormItem(fromField)
-			popup.AddFormItem(toField)
-			popup.AddButton("Download", func() {
-				ssh.PutSCPDownloadEntry(selectedConfig.Host, ssh.SCPHistoryEntry{
-					From: fromField.GetText(),
-					To:   toField.GetText(),
-				})
-				err := ssh.UploadFile(client, fromField.GetText(), toField.GetText())
-				pages.RemovePage("popup")
-				if err != nil {
-					infoPopup(pages,
-						fmt.Sprintf("Error downloading %s -> %s: %v",
-							fromField.GetText(),
-							toField.GetText(), err))
-				} else {
-					infoPopup(pages, "Successfully downloaded")
-				}
-			})
-			popup.SetCancelFunc(func() {
-				pages.RemovePage("popup")
-			})
-			pages.AddPage("popup", popup, true, true)
 			return nil
 		case 'm':
 			if pages.HasPage("popup") {
@@ -270,7 +240,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 			}
 			for i := range multiSelectConfigs {
 				for row := 1; row < table.GetRowCount(); row++ {
-					selectedConfig := configs[row]
+					selectedConfig := configs[row-1]
 					if multiSelectConfigs[i].Host == selectedConfig.Host {
 						table.GetCell(row, 0).SetBackgroundColor(tcell.ColorNone)
 						break
@@ -278,6 +248,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 				}
 			}
 			multiSelectConfigs = multiSelectConfigs[:0]
+			return nil
 		case 'e':
 			if pages.HasPage("popup") {
 				return event
@@ -460,6 +431,7 @@ func multiCopyTo(pages *tview.Pages, selectedConfigs []ssh.SSHConfig) {
 	popup.AddFormItem(toField)
 
 	popup.AddButton("Upload", func() {
+		successCount := 0
 		for i := range clients {
 			ssh.PutSCPUploadEntry(selectedConfigs[i].Host, ssh.SCPHistoryEntry{
 				From: fromField.GetText(),
@@ -471,9 +443,12 @@ func multiCopyTo(pages *tview.Pages, selectedConfigs []ssh.SSHConfig) {
 					fmt.Sprintf("Error uploading %s -> %s: %v",
 						fromField.GetText(),
 						toField.GetText(), err))
+			} else {
+				successCount++
 			}
 		}
 		pages.RemovePage("popup")
+		infoPopup(pages, fmt.Sprintf("Successfully uploaded: %d/%d", successCount, len(clients)))
 	})
 	popup.SetCancelFunc(func() {
 		pages.RemovePage("popup")
@@ -498,7 +473,7 @@ func singleExecOn(pages *tview.Pages, selectedConfig ssh.SSHConfig) {
 		ssh.PutExecEntry(selectedConfig.Host, ssh.ExecHistoryEntry{
 			Command: cmdField.GetText(),
 		})
-		err := ssh.ExecCommand(client, cmdField.GetText())
+		b, err := ssh.ExecCommand(client, cmdField.GetText())
 		pages.RemovePage("popup")
 		if err != nil {
 			infoPopup(pages,
@@ -507,7 +482,7 @@ func singleExecOn(pages *tview.Pages, selectedConfig ssh.SSHConfig) {
 					selectedConfig.Host,
 					err))
 		} else {
-			infoPopup(pages, "Successfully uploaded")
+			infoPopup(pages, fmt.Sprintf("Successfully executed:\n%s\n", string(b)))
 		}
 	})
 	popup.SetCancelFunc(func() {
@@ -535,21 +510,119 @@ func multiExecOn(pages *tview.Pages, selectedConfigs []ssh.SSHConfig) {
 		SetAutocompleteFunc(DirAutocomplete)
 	popup.AddFormItem(cmdField)
 
+	successCount := 0
 	popup.AddButton("Execute on all", func() {
 		for i := range clients {
 			ssh.PutExecEntry(selectedConfigs[i].Host, ssh.ExecHistoryEntry{
 				Command: cmdField.GetText(),
 			})
-			err := ssh.ExecCommand(clients[i], cmdField.GetText())
+			_, err := ssh.ExecCommand(clients[i], cmdField.GetText())
 			if err != nil {
 				infoPopup(pages,
 					fmt.Sprintf("Error executing %s on %s: %v",
 						cmdField.GetText(),
 						selectedConfigs[i].Host,
 						err))
+			} else {
+				successCount++
 			}
 		}
 		pages.RemovePage("popup")
+		infoPopup(pages, fmt.Sprintf("Successfully executed: %d/%d", successCount, len(clients)))
+	})
+	popup.SetCancelFunc(func() {
+		pages.RemovePage("popup")
+	})
+	pages.AddPage("popup", popup, true, true)
+}
+
+func singleCopyFrom(pages *tview.Pages, selectedConfig ssh.SSHConfig) {
+	client, err := ssh.SSHClient(selectedConfig)
+	if err != nil {
+		infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
+			selectedConfig.Host, err))
+		return
+	}
+	prevValues := ssh.GetSCPDownloadEntry(selectedConfig.Host)
+	popup := tview.NewForm()
+	fromField := tview.NewInputField()
+	fromField.SetLabel("From (remote): ").SetFieldWidth(256).SetText(prevValues.From)
+
+	toField := tview.NewInputField().SetFieldWidth(256).SetText(prevValues.To)
+	toField.SetLabel("To (local): ").
+		SetAutocompleteFunc(DirAutocomplete)
+
+	popup.AddFormItem(fromField)
+	popup.AddFormItem(toField)
+	popup.AddButton("Download", func() {
+		ssh.PutSCPDownloadEntry(selectedConfig.Host, ssh.SCPHistoryEntry{
+			From: fromField.GetText(),
+			To:   toField.GetText(),
+		})
+		err := ssh.DownloadFile(client, fromField.GetText(), toField.GetText())
+		pages.RemovePage("popup")
+		if err != nil {
+			infoPopup(pages,
+				fmt.Sprintf("Error downloading %s -> %s: %v",
+					fromField.GetText(),
+					toField.GetText(), err))
+		} else {
+			infoPopup(pages, "Successfully downloaded")
+		}
+	})
+	popup.SetCancelFunc(func() {
+		pages.RemovePage("popup")
+	})
+	pages.AddPage("popup", popup, true, true)
+}
+
+func multiCopyFrom(pages *tview.Pages, selectedConfigs []ssh.SSHConfig) {
+	var clients []*cssh.Client
+	for i := range selectedConfigs {
+		client, err := ssh.SSHClient(selectedConfigs[i])
+		if err != nil {
+			infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
+				selectedConfigs[i].Host, err))
+			return
+		}
+		clients = append(clients, client)
+	}
+
+	prevValues := ssh.GetSCPDownloadEntry(selectedConfigs[0].Host)
+	popup := tview.NewForm()
+	fromField := tview.NewInputField()
+	fromField.SetLabel("From (remote): ").SetFieldWidth(256).SetText(prevValues.From)
+
+	toField := tview.NewInputField().SetFieldWidth(256).SetText(prevValues.To)
+	toField.SetLabel("To (local, use * for hosts): ").
+		SetAutocompleteFunc(DirAutocomplete)
+
+	popup.AddFormItem(fromField)
+	popup.AddFormItem(toField)
+	popup.AddButton("Download", func() {
+		if strings.Index(toField.GetText(), "*") == -1 {
+			infoPopup(pages, "Please specify a * in the 'To:' to differenciate the downloaded files\nfor instance: /tmp/toto_*.tar.gz or /tmp/*/toto.tar.gz")
+			return
+		}
+		successCount := 0
+		for i := range clients {
+			ssh.PutSCPDownloadEntry(selectedConfigs[i].Host, ssh.SCPHistoryEntry{
+				From: fromField.GetText(),
+				To:   toField.GetText(),
+			})
+			toPath := strings.ReplaceAll(toField.GetText(), "*", selectedConfigs[i].Host)
+			err := ssh.DownloadFile(clients[i], fromField.GetText(), toPath)
+			if err != nil {
+				infoPopup(pages,
+					fmt.Sprintf("Error downloading %s -> %s: %v",
+						fromField.GetText(),
+						toPath, err))
+			} else {
+				successCount++
+			}
+		}
+		pages.RemovePage("popup")
+		infoPopup(pages, fmt.Sprintf("Successfully downloaded: %d/%d", successCount, len(clients)))
 	})
 	popup.SetCancelFunc(func() {
 		pages.RemovePage("popup")

@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"net"
 	"os"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -176,6 +178,19 @@ func CheckSSHPort(host string, port int, timeout time.Duration) bool {
 	return true
 }
 
+var sshTimeout = 10 * time.Second
+
+func init() {
+	customTimeout := os.Getenv("S1H_TIMEOUT_SEC")
+	if customTimeout != "" {
+		n, err := strconv.Atoi(customTimeout)
+		if err != nil {
+			log.Fatalf("S1H_TIMEOUT_SEC wrong format: %v", err)
+		}
+		sshTimeout = time.Duration(n) * time.Second
+	}
+}
+
 func SSHClient(cfg SSHConfig) (*cssh.Client, error) {
 
 	var config cssh.ClientConfig
@@ -186,6 +201,7 @@ func SSHClient(cfg SSHConfig) (*cssh.Client, error) {
 				cssh.Password(cfg.Password),
 			},
 			HostKeyCallback: cssh.InsecureIgnoreHostKey(),
+			Timeout:         sshTimeout,
 		}
 	} else if cfg.IdentityFile != "" {
 		auth, err := LoadIdentifyFile(cfg.IdentityFile)
@@ -198,6 +214,7 @@ func SSHClient(cfg SSHConfig) (*cssh.Client, error) {
 				cssh.PublicKeys(auth),
 			},
 			HostKeyCallback: cssh.InsecureIgnoreHostKey(),
+			Timeout:         sshTimeout,
 		}
 	} else {
 		def := GetDefaultPrivateKeys()
@@ -206,6 +223,7 @@ func SSHClient(cfg SSHConfig) (*cssh.Client, error) {
 				User:            cfg.User,
 				Auth:            []cssh.AuthMethod{auth},
 				HostKeyCallback: cssh.InsecureIgnoreHostKey(),
+				Timeout:         sshTimeout,
 			}
 			c, err := cssh.Dial("tcp", cfg.Endpoint(), &config)
 			if c != nil {
@@ -333,11 +351,11 @@ func DownloadFile(client *ssh.Client, remotePath, localFile string) error {
 	return nil
 }
 
-func ExecCommand(client *ssh.Client, command string) error {
+func ExecCommand(client *ssh.Client, command string) ([]byte, error) {
 	sess, err := client.NewSession()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer sess.Close()
-	return sess.Run(command)
+	return sess.CombinedOutput(command)
 }
