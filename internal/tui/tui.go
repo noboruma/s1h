@@ -16,6 +16,7 @@ import (
 var (
 	autoCompleteHostNames []string
 	autoCompleteHosts     []string
+	multiSelectConfigs []ssh.SSHConfig
 )
 
 func PopulateAutocompleteCaches(configs []ssh.SSHConfig) {
@@ -24,6 +25,8 @@ func PopulateAutocompleteCaches(configs []ssh.SSHConfig) {
 		autoCompleteHostNames = append(autoCompleteHostNames, cfg.HostName)
 	}
 }
+
+const tableHeaderSize = 1
 
 func DisplaySSHConfig(configs []ssh.SSHConfig) {
 	app := tview.NewApplication()
@@ -70,40 +73,45 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 		SetTextColor(tcell.ColorPurple).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-
-	tableHeader := tview.NewTable()
-	tableHeader.SetSelectable(false, false)
-
-	tableHeader.SetCell(0, 0, tview.NewTableCell("Host (F1)").
+	header.SetCell(4, 0, tview.NewTableCell("m:").
 		SetTextColor(tcell.ColorBlue).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	tableHeader.SetCell(0, 1, tview.NewTableCell("User").
-		SetTextColor(tcell.ColorBlueViolet).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	tableHeader.SetCell(0, 2, tview.NewTableCell("Port").
-		SetTextColor(tcell.ColorGreen).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	tableHeader.SetCell(0, 3, tview.NewTableCell("HostName (F4)").
-		SetTextColor(tcell.ColorRed).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	tableHeader.SetCell(0, 4, tview.NewTableCell("Auth").
-		SetTextColor(tcell.ColorBlue).
+	header.SetCell(4, 1, tview.NewTableCell("Multi select host (toggle)").
+		SetTextColor(tcell.ColorPurple).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
 
-	root.AddItem(header, 4, 1, true)
-	root.AddItem(tableHeader, 1, 1, true)
+	root.AddItem(header, 5, 2, false)
 	root.AddItem(pages, 0, 15, true)
 
 	table := tview.NewTable().
 		SetBorders(false).
 		SetSelectable(true, false)
 
-	for i, config := range configs {
+	table.SetCell(0, 0, tview.NewTableCell("Host (F1)").
+		SetTextColor(tcell.ColorBlue).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false))
+	table.SetCell(0, 1, tview.NewTableCell("User").
+		SetTextColor(tcell.ColorBlueViolet).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false))
+	table.SetCell(0, 2, tview.NewTableCell("Port").
+		SetTextColor(tcell.ColorGreen).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false))
+	table.SetCell(0, 3, tview.NewTableCell("HostName (F4)").
+		SetTextColor(tcell.ColorRed).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false))
+	table.SetCell(0, 4, tview.NewTableCell("Auth").
+		SetTextColor(tcell.ColorBlue).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false))
+
+	for ii, config := range configs {
+		i := ii + tableHeaderSize
 		table.SetCell(i, 0, tview.NewTableCell(config.Host).
 			SetAlign(tview.AlignLeft))
 		table.SetCell(i, 1, tview.NewTableCell(config.User).
@@ -124,7 +132,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 	go reachabilityCheck(configs, table, app)
 
 	table.SetSelectedFunc(func(row, column int) {
-		selectedConfig := configs[row]
+		selectedConfig := configs[row-tableHeaderSize]
 
 		pages.AddPage("popup", sshPage, true, true)
 		app.Suspend(func() {
@@ -167,7 +175,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 				return event
 			}
 			row, _ := table.GetSelection()
-			selectedConfig := configs[row]
+			selectedConfig := configs[row-tableHeaderSize]
 			client, err := ssh.SSHClient(selectedConfig)
 			if err != nil {
 				infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
@@ -210,7 +218,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 				return event
 			}
 			row, _ := table.GetSelection()
-			selectedConfig := configs[row]
+			selectedConfig := configs[row-tableHeaderSize]
 			client, err := ssh.SSHClient(selectedConfig)
 			if err != nil {
 				infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
@@ -249,6 +257,24 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 			})
 			pages.AddPage("popup", popup, true, true)
 			return nil
+		case 'm':
+			row, _ := table.GetSelection()
+			selectedConfig := configs[row-tableHeaderSize]
+
+			found := false
+			for i := range multiSelectConfigs {
+				if multiSelectConfigs[i].Host == selectedConfig.Host {
+					multiSelectConfigs[i] = multiSelectConfigs[len(multiSelectConfigs)-1]
+					multiSelectConfigs = multiSelectConfigs[:len(multiSelectConfigs)-1]
+					table.GetCell(row, 0).SetBackgroundColor(tcell.ColorNone)
+					found = true
+					break
+				}
+			}
+			if !found {
+				multiSelectConfigs = append(multiSelectConfigs, selectedConfig)
+				table.GetCell(row, 0).SetBackgroundColor(tcell.ColorBlue)
+			}
 		}
 		return event
 	})
@@ -269,9 +295,9 @@ func reachabilityCheck(configs []ssh.SSHConfig, table *tview.Table, app *tview.A
 			}
 			go func(i int) {
 				if ssh.CheckSSHPort(config.HostName, port, 10*time.Second) {
-					table.GetCell(i, 0).SetTextColor(tcell.ColorDarkGreen)
+					table.GetCell(i+tableHeaderSize, 0).SetTextColor(tcell.ColorDarkGreen)
 				} else {
-					table.GetCell(i, 0).SetTextColor(tcell.ColorDarkRed)
+					table.GetCell(i+tableHeaderSize, 0).SetTextColor(tcell.ColorDarkRed)
 				}
 				app.Draw()
 			}(i)
