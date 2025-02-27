@@ -107,8 +107,22 @@ func main() {
 				fmt.Println("Error while copying: ", err.Error())
 				os.Exit(1)
 			}
+		case "ip":
+			if len(os.Args) != 3 {
+				fmt.Println("Missing args: s1h ip host")
+				os.Exit(1)
+			}
+			configs := loadConfigs()
+			for i := range configs {
+				if configs[i].Host == os.Args[2] {
+					fmt.Printf("%s -> %s\n", configs[i].Host, configs[i].Endpoint())
+					os.Exit(0)
+				}
+			}
+			fmt.Printf("Could not find: %s\n", os.Args[2])
+			os.Exit(1)
 		default:
-			fmt.Println("Unknown command. Expected 'upsert' or 'remove'.")
+			fmt.Println("Unknown command. Expected 'upsert', 'remove', 'cp', 'shell', 'ip'.")
 			os.Exit(1)
 		}
 	}

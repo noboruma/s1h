@@ -262,6 +262,14 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 				singleExecOn(pages, selectedConfig)
 			}
 			return nil
+		case '/':
+			fallthrough
+		case '?':
+			searchFilterPopup("Host", pages, table, configs,
+				func(cfg ssh.SSHConfig, match string) bool {
+					return cfg.Host == match
+				}, autoCompleteHosts)
+			return nil
 		}
 		return event
 	})
@@ -348,7 +356,7 @@ func searchFilterPopup(fieldName string, pages *tview.Pages, table *tview.Table,
 		if hostname != "" {
 			for i, cfg := range configs {
 				if match(cfg, hostname) {
-					table.Select(i, 0)
+					table.Select(i+tableHeaderSize, 0)
 					break
 				}
 			}
