@@ -54,7 +54,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 		SetTextColor(tcell.ColorYellow).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	header.SetCell(1, 1, tview.NewTableCell("Copy local file to selected remote").
+	header.SetCell(1, 1, tview.NewTableCell("Copy local file to selected remote(s)").
 		SetTextColor(tcell.ColorPurple).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
@@ -62,7 +62,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 		SetTextColor(tcell.ColorYellow).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	header.SetCell(2, 1, tview.NewTableCell("Copy from selected remote file to local").
+	header.SetCell(2, 1, tview.NewTableCell("Copy from selected remote to local file(s)").
 		SetTextColor(tcell.ColorPurple).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
@@ -86,7 +86,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 		SetTextColor(tcell.ColorBlue).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	header.SetCell(5, 1, tview.NewTableCell("Clear all multi selected host").
+	header.SetCell(5, 1, tview.NewTableCell("Clear all multi selected hosts").
 		SetTextColor(tcell.ColorPurple).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
