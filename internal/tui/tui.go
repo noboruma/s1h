@@ -164,6 +164,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 	})
 
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		defer app.Sync()
 		switch event.Key() {
 		case tcell.KeyEscape:
 			if pages.HasPage("popup") {
