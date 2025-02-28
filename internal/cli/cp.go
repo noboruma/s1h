@@ -68,14 +68,14 @@ func Copy(configs []ssh.SSHConfig, left, right string) error {
 			}
 			tempPath := filepath.Join(os.TempDir(),
 				removeSlashes("s1h"+left+right))
-			err = ssh.DownloadFile(leftClient, extractPath(leftHost), tempPath)
+			err = ssh.DownloadFile(leftClient, extractPath(left), tempPath)
 			if err != nil {
 				return err
 			}
 			defer os.Remove(tempPath)
-			err = ssh.UploadFile(rightClient, tempPath, extractPath(rightHost))
+			err = ssh.UploadFile(rightClient, tempPath, extractPath(right))
 		} else { // remote -> local
-			err = ssh.DownloadFile(leftClient, extractPath(leftHost), right)
+			err = ssh.DownloadFile(leftClient, extractPath(left), right)
 		}
 	} else { // local -> remote
 		var has bool
