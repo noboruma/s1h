@@ -291,6 +291,9 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 		case '/':
 			fallthrough
 		case '?':
+			if pages.HasPage("popup") {
+				return event
+			}
 			searchFilterPopup("Host", pages, table, configs,
 				func(cfg ssh.SSHConfig, match string) bool {
 					return cfg.Host == match
