@@ -27,12 +27,12 @@ Or download the binaries directly (choose your os/arch):
 
 ```
 # download the binaries from the release
-wget https://github.com/noboruma/s1h/releases/download/v0.3.1/s1h_Darwin_arm64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.3.1/s1h_Darwin_x86_64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.3.1/s1h_Linux_arm64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.3.1/s1h_Linux_x86_64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.3.1/s1h_Windows_arm64.zip
-wget https://github.com/noboruma/s1h/releases/download/v0.3.1/s1h_Windows_x86_64.zip
+wget https://github.com/noboruma/s1h/releases/download/v0.3.2/s1h_Darwin_arm64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.3.2/s1h_Darwin_x86_64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.3.2/s1h_Linux_arm64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.3.2/s1h_Linux_x86_64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.3.2/s1h_Windows_arm64.zip
+wget https://github.com/noboruma/s1h/releases/download/v0.3.2/s1h_Windows_x86_64.zip
 
 tar xvf chosen.tar.gz
 ```
@@ -51,8 +51,6 @@ s1h
 This command displays a list of available SSH hosts from your `~/.ssh/config`, allowing you to select one and connect. It also allows you to execute simple shell commands & scp commands across one or multiple hosts.
 
 ![main header](.github/assets/header.png)
-
-#### Example:
 
 Let's image you have the following SSH config file (i.e.` ~/.ssh/config`):
 ```
@@ -77,16 +75,17 @@ s1h
 ![main output](.github/assets/main.png)
 
 <span style="color:green">Green entries</span> are ssh reachable hosts. <span style="color:green">Red</span> indicates the host are not reachable with the given hostname & port.
-You can search hosts or hostname using repectively `F1` amd `F4` to jump directly to entries:
+
+You can search hosts or hostname using repectively `F1` amd `F2` to jump directly to entries:
 
 ![main output](.github/assets/search.png)
 
-- When you press `enter` and it will automatically use the configured authentication method (password or SSH key) to establish the connection. This opens a new shell on the remote host.
+- When you press `s` and it will automatically use the configured authentication method (password or SSH key) to establish the connection. This opens a new shell on the remote host.
 
-- When you press `c` it will give the option to upload a file to one or multiple selected host:
+- When you press `u` it will give the option to upload a file to one or multiple selected host:
 ![main output](.github/assets/upload.png)
 
-- When you press `C` it will give the option to download a file from one or multiple selected host:
+- When you press `d` it will give the option to download a file from one or multiple selected host:
 ![main output](.github/assets/download.png)
 
 - When you press `m` it will select the current entry for multi selection.
@@ -101,8 +100,9 @@ On top of password management, it is also possible to use `s1h` as a CLI to shel
 This approach might be more convenient if you rely on shell history to pass things around.
 Mostly this approach helps with password managements.
 ```
-s1h cp [hos1:]/path1 [hos2:]/path2
-s1h shell hos1
+s1h cp [host1:]/path1 [host2:]/path2
+s1h shell host1
+s1h ip host1
 ```
 
 ### What about password?
@@ -113,12 +113,12 @@ The encrypted file and the key are stored in the `$HOME/.config/s1h` folder, and
 #### Usage:
 
 ```sh
-s1h upsert --host=<host> [--password=<password>]
+s1h upsert -host=<host> [-password=<password>]
 ```
 or
 ```sh
-s1h upsert --host=<host>
-Enter password for <host>:
+s1h upsert -host=<host>
+Enter password for <host>: <terminal input>
 ```
 This updates the stored credentials for the specified ssh host.
 `s1h` comes with other password operations: `reveal` and `delete`.
@@ -126,10 +126,10 @@ This updates the stored credentials for the specified ssh host.
 #### Example:
 
 ```
-s1h upsert remote-vm mySecureP@ss
+s1h upsert -host=remote-vm -password=mySecureP@ss
 # Output: Credentials updated.
 
-s1h remove remote-vm
+s1h remove -host=remote-vm
 # Output: Credentials removed.
 ```
 

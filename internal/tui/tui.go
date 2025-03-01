@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -48,23 +49,23 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 		SetTextColor(tcell.ColorYellow).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	header.SetCell(1, 0, tview.NewTableCell("c:").
+	header.SetCell(1, 0, tview.NewTableCell("u:").
 		SetTextColor(tcell.ColorYellow).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	header.SetCell(1, 1, tview.NewTableCell("Copy local file to selected remote(s)").
+	header.SetCell(1, 1, tview.NewTableCell("Upload local file to selected remote host(s)").
 		SetTextColor(tcell.ColorPurple).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	header.SetCell(2, 0, tview.NewTableCell("<shift>+c:").
+	header.SetCell(2, 0, tview.NewTableCell("d:").
 		SetTextColor(tcell.ColorYellow).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	header.SetCell(2, 1, tview.NewTableCell("Copy from selected remote to local file(s)").
+	header.SetCell(2, 1, tview.NewTableCell("Download file(s) from  selected remote host(s)").
 		SetTextColor(tcell.ColorPurple).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	header.SetCell(3, 0, tview.NewTableCell("Enter:").
+	header.SetCell(3, 0, tview.NewTableCell("s:").
 		SetTextColor(tcell.ColorYellow).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
@@ -156,20 +157,19 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 
 	go reachabilityCheck(configs, table, app)
 
-	table.SetSelectedFunc(func(row, column int) {
-		selectedConfig := configs[row]
+	//table.SetSelectedFunc(func(row, column int) {
+	//	selectedConfig := configs[row]
 
-		pages.AddPage("popup", sshPage, true, true)
-		app.Suspend(func() {
-			err := ssh.ExecuteSSHShell(selectedConfig)
-			pages.RemovePage("popup")
-			if err != nil {
-				infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
-					selectedConfig.Host, err))
-			}
-		})
-
-	})
+	//	pages.AddPage("popup", sshPage, true, true)
+	//	app.Suspend(func() {
+	//		err := ssh.ExecuteSSHShell(selectedConfig)
+	//		pages.RemovePage("popup")
+	//		if err != nil {
+	//			infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
+	//				selectedConfig.Host, err))
+	//		}
+	//	})
+	//})
 
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		defer app.Sync()
@@ -198,7 +198,25 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 			} else {
 				app.Stop()
 			}
-		case 'c': // copy to
+		case 's': // shell into
+			if pages.HasPage("popup") {
+				return event
+			}
+			row, _ := table.GetSelection()
+			selectedConfig := configs[row]
+			pages.AddPage("popup", sshPage, true, true)
+			app.Suspend(func() {
+				appSuspended.Store(true)
+				defer appSuspended.Store(false)
+				err := ssh.ExecuteSSHShell(selectedConfig)
+				pages.RemovePage("popup")
+				if err != nil {
+					infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
+						selectedConfig.Host, err))
+				}
+			})
+			return nil
+		case 'u': // copy to
 			if pages.HasPage("popup") {
 				return event
 			}
@@ -210,7 +228,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 				singleCopyTo(pages, selectedConfig)
 			}
 			return nil
-		case 'C': // copy from
+		case 'd': // copy from
 			if pages.HasPage("popup") {
 				return event
 			}
@@ -289,6 +307,8 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 	}
 }
 
+var appSuspended atomic.Bool
+
 func reachabilityCheck(configs []ssh.SSHConfig, table *tview.Table, app *tview.Application) {
 	for ; ; <-time.After(2 * time.Minute) {
 		for i, config := range configs {
@@ -302,7 +322,9 @@ func reachabilityCheck(configs []ssh.SSHConfig, table *tview.Table, app *tview.A
 				} else {
 					table.GetCell(i, 0).SetTextColor(tcell.ColorDarkRed)
 				}
-				app.Draw()
+				if !appSuspended.Load() {
+					app.Draw()
+				}
 			}(i)
 		}
 	}
