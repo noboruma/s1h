@@ -27,12 +27,12 @@ Or download the binaries directly (choose your os/arch):
 
 ```
 # download the binaries from the release
-wget https://github.com/noboruma/s1h/releases/download/v0.3.2/s1h_Darwin_arm64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.3.2/s1h_Darwin_x86_64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.3.2/s1h_Linux_arm64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.3.2/s1h_Linux_x86_64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.3.2/s1h_Windows_arm64.zip
-wget https://github.com/noboruma/s1h/releases/download/v0.3.2/s1h_Windows_x86_64.zip
+wget https://github.com/noboruma/s1h/releases/download/v0.3.3/s1h_Darwin_arm64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.3.3/s1h_Darwin_x86_64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.3.3/s1h_Linux_arm64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.3.3/s1h_Linux_x86_64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.3.3/s1h_Windows_arm64.zip
+wget https://github.com/noboruma/s1h/releases/download/v0.3.3/s1h_Windows_x86_64.zip
 
 tar xvf chosen.tar.gz
 ```
