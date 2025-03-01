@@ -11,8 +11,15 @@ import (
 	"os"
 )
 
+type Entry struct {
+	Password string `json:"password"`
+	Hostname string `json:"hostname"`
+	User     string `json:"user"`
+	Port     string `json:"port"`
+}
+
 type Credentials struct {
-	Entries map[string]string `json:"credentials"`
+	Entries map[string]Entry `json:"credentials"`
 }
 
 func GenerateMasterKey() ([]byte, error) {
@@ -128,17 +135,25 @@ func saveCredentials(filename string, creds Credentials, key []byte) error {
 	return nil
 }
 
-func UpsertCredential(filename string, host string, password string, key []byte) error {
+func UpsertCredential(filename string, host, hostname, user, port string, password string, key []byte) error {
 	creds, err := LoadCredentials(filename, key)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
 	if creds.Entries == nil {
-		creds.Entries = make(map[string]string)
+		creds.Entries = make(map[string]Entry)
 	}
 
-	creds.Entries[host] = password
+	entry := Entry{
+		Password: password,
+	}
+	if hostname != "" {
+		entry.Hostname = hostname
+		entry.User = user
+		entry.Port = port
+	}
+	creds.Entries[host] = entry
 
 	return saveCredentials(filename, creds, key)
 }
@@ -154,7 +169,7 @@ func RemoveCredential(filename string, host string, key []byte) error {
 	return saveCredentials(filename, creds, key)
 }
 
-func RevealCredential(filename string, host string, key []byte) (string, error) {
+func RevealCredentialPassword(filename string, host string, key []byte) (string, error) {
 	creds, err := LoadCredentials(filename, key)
 	if err != nil {
 		return "", err
@@ -165,5 +180,5 @@ func RevealCredential(filename string, host string, key []byte) (string, error) 
 		return "", fmt.Errorf("no entry for %s", host)
 	}
 
-	return cred, nil
+	return cred.Password, nil
 }

@@ -24,12 +24,12 @@ Or download the binaries directly (choose your os/arch):
 
 ```
 # download the binaries from the release
-wget https://github.com/noboruma/s1h/releases/download/v0.3.3/s1h_Darwin_arm64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.3.3/s1h_Darwin_x86_64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.3.3/s1h_Linux_arm64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.3.3/s1h_Linux_x86_64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.3.3/s1h_Windows_arm64.zip
-wget https://github.com/noboruma/s1h/releases/download/v0.3.3/s1h_Windows_x86_64.zip
+wget https://github.com/noboruma/s1h/releases/download/v0.4.0/s1h_Darwin_arm64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.4.0/s1h_Darwin_x86_64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.4.0/s1h_Linux_arm64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.4.0/s1h_Linux_x86_64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.4.0/s1h_Windows_arm64.zip
+wget https://github.com/noboruma/s1h/releases/download/v0.4.0/s1h_Windows_x86_64.zip
 
 tar xvf chosen.tar.gz
 ```
@@ -121,6 +121,11 @@ Enter password for <host>: <terminal input>
 ```
 This updates the stored credentials for the specified ssh host.
 `s1h` comes with other password operations: `reveal` and `delete`.
+
+It is also possible to extend SSH config and add completely new entries or override existing hosts by passing a hostname, such as:
+```sh
+s1h upsert -host=<host> [-password=<password>] -hostname=toto.io [-user=root] [-port=22]
+```
 
 #### Example:
 

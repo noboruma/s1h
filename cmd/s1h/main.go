@@ -39,10 +39,13 @@ func main() {
 		key, credsFile := loadOrStoreLocalEncryptedFile()
 		switch os.Args[1] {
 		case "upsert":
-			var host, password string
+			var host, password, hostname, user, port string
 			updateCmd := flag.NewFlagSet("upsert", flag.ExitOnError)
 			updateCmd.StringVar(&host, "host", "", "The host to update")
 			updateCmd.StringVar(&password, "password", "", "The password to set for the host (optional)")
+			updateCmd.StringVar(&hostname, "hostname", "", "The hostname/endpoint to set for the host (optional)")
+			updateCmd.StringVar(&user, "user", "root", "The user to use for the host (optional)")
+			updateCmd.StringVar(&port, "port", "22", "The port to use for the host (optional)")
 			err := updateCmd.Parse(os.Args[2:])
 			if err != nil {
 				fmt.Println("Error upading credentials:", err.Error())
@@ -62,7 +65,7 @@ func main() {
 				password = string(bytePassword)
 			}
 
-			err = credentials.UpsertCredential(credsFile, host, password, key)
+			err = credentials.UpsertCredential(credsFile, host, hostname, user, port, password, key)
 			if err != nil {
 				fmt.Println("Error updating credentials:", err)
 				os.Exit(1)
@@ -103,7 +106,7 @@ func main() {
 				fmt.Println("Please provide the hostname to reveal.")
 				os.Exit(1)
 			}
-			pass, err := credentials.RevealCredential(credsFile, host, key)
+			pass, err := credentials.RevealCredentialPassword(credsFile, host, key)
 			if err != nil {
 				fmt.Println("Error retrieving credential:", err.Error())
 				os.Exit(1)
@@ -179,7 +182,7 @@ func loadConfigs() []ssh.SSHConfig {
 		if err != nil {
 			log.Fatalf("Error loading creds: %v\n", err)
 		}
-		config.PopulateCredentialsToConfig(creds, configs)
+		configs = config.PopulateCredentialsToConfig(creds, configs)
 	}
 	return configs
 }
