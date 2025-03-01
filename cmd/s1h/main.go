@@ -156,6 +156,19 @@ func main() {
 	}
 }
 
+func getConfigDir() string {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		log.Fatalf("Error loading creds: %v\n", err)
+	}
+	configDir = filepath.Join(configDir, "s1h")
+	err = os.MkdirAll(configDir, 0755)
+	if err != nil {
+		log.Fatalf("Error loading creds: %v\n", err)
+	}
+	return configDir
+}
+
 func loadConfigs() []ssh.SSHConfig {
 	configPath := os.Getenv("SSH_CONFIG")
 	if configPath == "" {
@@ -167,10 +180,7 @@ func loadConfigs() []ssh.SSHConfig {
 		log.Fatalf("Error loading creds: %v\n", err)
 	}
 
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		log.Fatalf("Error loading creds: %v\n", err)
-	}
+	configDir := getConfigDir()
 
 	masterKeyFile := filepath.Join(configDir, masterKeyFileName)
 	credsFile := filepath.Join(configDir, credsFileName)
@@ -189,15 +199,11 @@ func loadConfigs() []ssh.SSHConfig {
 
 func startMainTUI(configs []ssh.SSHConfig) {
 
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		log.Fatalf("Error loading creds: %v\n", err)
-	}
-
+	configDir := getConfigDir()
 	historyFile := filepath.Join(configDir, historyFileName)
 
 	tui.PopulateAutocompleteCaches(configs)
-	err = ssh.LoadSCPHistory(historyFile)
+	err := ssh.LoadSCPHistory(historyFile)
 	if err != nil {
 		log.Fatalf("Error loading scp history")
 	}
@@ -206,15 +212,11 @@ func startMainTUI(configs []ssh.SSHConfig) {
 }
 
 func loadOrStoreLocalEncryptedFile() ([]byte, string) {
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		fmt.Println("Cannot access config dir: ", err.Error())
-		os.Exit(1)
-	}
+	configDir := getConfigDir()
 	masterKeyFile := filepath.Join(configDir, masterKeyFileName)
 	credsFile := filepath.Join(configDir, credsFileName)
 
-	_, err = os.Stat(masterKeyFile)
+	_, err := os.Stat(masterKeyFile)
 	if err != nil {
 		key, err := credentials.GenerateMasterKey()
 		if err != nil {
