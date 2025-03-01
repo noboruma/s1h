@@ -90,7 +90,7 @@ You can search hosts or hostname using repectively `F1` amd `F2` to jump directl
 
 - When you press `m` it will select the current entry for multi selection.
 
-- When you press `M` it will deselect multi-select entries.
+- When you press `M` it will select/deselect all multi-select entries.
 
 - When you press `e` you can execute a simple command to one or multiple selected host.
 

@@ -12,7 +12,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/noboruma/s1h/internal/ssh"
 	"github.com/rivo/tview"
-	cssh "golang.org/x/crypto/ssh"
 )
 
 var (
@@ -85,7 +84,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 		SetTextColor(tcell.ColorBlue).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
-	header.SetCell(5, 1, tview.NewTableCell("Clear all multi selected hosts").
+	header.SetCell(5, 1, tview.NewTableCell("Select/Clear all multi selected hosts").
 		SetTextColor(tcell.ColorPurple).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false))
@@ -134,6 +133,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 		SetBorders(false).
 		SetSelectable(true, false)
 
+	reachables := make([]atomic.Bool, len(configs))
 	for i, config := range configs {
 		table.SetCell(i, 0, tview.NewTableCell(config.Host).
 			SetAlign(tview.AlignLeft))
@@ -144,7 +144,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 		table.SetCell(i, 3, tview.NewTableCell(config.User).
 			SetAlign(tview.AlignLeft))
 		if config.Password != "" && config.IdentityFile == "" {
-			table.SetCell(i, 4, tview.NewTableCell("Pass").
+			table.SetCell(i, 4, tview.NewTableCell("Passwd").
 				SetAlign(tview.AlignLeft))
 		} else if config.IdentityFile != "" {
 			table.SetCell(i, 4, tview.NewTableCell("Key").
@@ -155,7 +155,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 		}
 	}
 
-	go reachabilityCheck(configs, table, app)
+	go reachabilityCheck(configs, reachables, table, app)
 
 	//table.SetSelectedFunc(func(row, column int) {
 	//	selectedConfig := configs[row]
@@ -193,9 +193,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 		}
 		switch event.Rune() {
 		case 'q':
-			if pages.HasPage("popup") {
-				pages.RemovePage("popup")
-			} else {
+			if !pages.HasPage("popup") {
 				app.Stop()
 			}
 		case 's': // shell into
@@ -246,35 +244,56 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 			}
 			row, _ := table.GetSelection()
 			selectedConfig := configs[row]
+			if !reachables[row].Load() {
+				infoPopup(pages, fmt.Sprintf("Host %s: is not reachable", selectedConfig.Host))
+				return nil
+			}
 
-			found := false
+			found := -1
 			for i := range multiSelectConfigs {
 				if multiSelectConfigs[i].Host == selectedConfig.Host {
-					multiSelectConfigs[i] = multiSelectConfigs[len(multiSelectConfigs)-1]
-					multiSelectConfigs = multiSelectConfigs[:len(multiSelectConfigs)-1]
-					table.GetCell(row, 0).SetBackgroundColor(tcell.ColorNone)
-					found = true
+					found = i
 					break
 				}
 			}
-			if !found {
+			if found == -1 {
 				multiSelectConfigs = append(multiSelectConfigs, selectedConfig)
 				table.GetCell(row, 0).SetBackgroundColor(tcell.ColorBlue)
+			} else {
+				multiSelectConfigs[found] = multiSelectConfigs[len(multiSelectConfigs)-1]
+				multiSelectConfigs = multiSelectConfigs[:len(multiSelectConfigs)-1]
+				table.GetCell(row, 0).SetBackgroundColor(tcell.ColorNone)
 			}
+			return nil
 		case 'M':
 			if pages.HasPage("popup") {
 				return event
 			}
-			for i := range multiSelectConfigs {
-				for row := 1; row < table.GetRowCount(); row++ {
-					selectedConfig := configs[row-1]
-					if multiSelectConfigs[i].Host == selectedConfig.Host {
-						table.GetCell(row, 0).SetBackgroundColor(tcell.ColorNone)
-						break
+			if len(multiSelectConfigs) == 0 {
+				for i := range configs {
+					if !reachables[i].Load() {
+						continue
+					}
+					table.GetCell(i, 0).SetBackgroundColor(tcell.ColorBlue)
+					multiSelectConfigs = append(multiSelectConfigs, configs[i])
+				}
+			}else if len(multiSelectConfigs) == len(configs) {
+				for row := 0; row < table.GetRowCount(); row++ {
+					table.GetCell(row, 0).SetBackgroundColor(tcell.ColorNone)
+				}
+				multiSelectConfigs = multiSelectConfigs[:0]
+			} else {
+				for i := range multiSelectConfigs {
+					for row := 0; row < table.GetRowCount(); row++ {
+						selectedConfig := configs[row]
+						if multiSelectConfigs[i].Host == selectedConfig.Host {
+							table.GetCell(row, 0).SetBackgroundColor(tcell.ColorNone)
+							break
+						}
 					}
 				}
+				multiSelectConfigs = multiSelectConfigs[:0]
 			}
-			multiSelectConfigs = multiSelectConfigs[:0]
 			return nil
 		case 'e':
 			if pages.HasPage("popup") {
@@ -312,7 +331,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 
 var appSuspended atomic.Bool
 
-func reachabilityCheck(configs []ssh.SSHConfig, table *tview.Table, app *tview.Application) {
+func reachabilityCheck(configs []ssh.SSHConfig, reachables []atomic.Bool, table *tview.Table, app *tview.Application) {
 	for ; ; <-time.After(2 * time.Minute) {
 		for i, config := range configs {
 			port, err := strconv.Atoi(config.Port)
@@ -322,8 +341,10 @@ func reachabilityCheck(configs []ssh.SSHConfig, table *tview.Table, app *tview.A
 			go func(i int) {
 				if ssh.CheckSSHPort(config.HostName, port, 10*time.Second) {
 					table.GetCell(i, 0).SetTextColor(tcell.ColorDarkGreen)
+					reachables[i].Store(true)
 				} else {
 					table.GetCell(i, 0).SetTextColor(tcell.ColorDarkRed)
+					reachables[i].Store(false)
 				}
 				if !appSuspended.Load() {
 					app.Draw()
@@ -450,15 +471,10 @@ func singleCopyTo(pages *tview.Pages, selectedConfig ssh.SSHConfig) {
 }
 
 func multiCopyTo(pages *tview.Pages, selectedConfigs []ssh.SSHConfig) {
-	var clients []*cssh.Client
-	for i := range selectedConfigs {
-		client, err := ssh.SSHClient(selectedConfigs[i])
-		if err != nil {
-			infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
-				selectedConfigs[i].Host, err))
-			return
-		}
-		clients = append(clients, client)
+	clients, err := ssh.InitMultiClients(selectedConfigs)
+	if err != nil {
+		infoPopup(pages, err.Error())
+		return
 	}
 
 	prevValues := ssh.GetSCPUploadEntry(selectedConfigs[0].Host)
@@ -534,15 +550,10 @@ func singleExecOn(pages *tview.Pages, selectedConfig ssh.SSHConfig) {
 }
 
 func multiExecOn(pages *tview.Pages, selectedConfigs []ssh.SSHConfig) {
-	var clients []*cssh.Client
-	for i := range selectedConfigs {
-		client, err := ssh.SSHClient(selectedConfigs[i])
-		if err != nil {
-			infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
-				selectedConfigs[i].Host, err))
-			return
-		}
-		clients = append(clients, client)
+	clients, err := ssh.InitMultiClients(selectedConfigs)
+	if err != nil {
+		infoPopup(pages, err.Error())
+		return
 	}
 
 	prevValues := ssh.GetExecEntry(selectedConfigs[0].Host)
@@ -619,15 +630,10 @@ func singleCopyFrom(pages *tview.Pages, selectedConfig ssh.SSHConfig) {
 }
 
 func multiCopyFrom(pages *tview.Pages, selectedConfigs []ssh.SSHConfig) {
-	var clients []*cssh.Client
-	for i := range selectedConfigs {
-		client, err := ssh.SSHClient(selectedConfigs[i])
-		if err != nil {
-			infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
-				selectedConfigs[i].Host, err))
-			return
-		}
-		clients = append(clients, client)
+	clients, err := ssh.InitMultiClients(selectedConfigs)
+	if err != nil {
+		infoPopup(pages, err.Error())
+		return
 	}
 
 	prevValues := ssh.GetSCPDownloadEntry(selectedConfigs[0].Host)
@@ -642,8 +648,8 @@ func multiCopyFrom(pages *tview.Pages, selectedConfigs []ssh.SSHConfig) {
 	popup.AddFormItem(fromField)
 	popup.AddFormItem(toField)
 	popup.AddButton("Download", func() {
-		if strings.Index(toField.GetText(), "*") == -1 {
-			infoPopup(pages, "Please specify a * in the 'To:' to differenciate the downloaded files\nfor instance: /tmp/toto_*.tar.gz or /tmp/*/toto.tar.gz")
+		if !strings.Contains(toField.GetText(), "*") {
+			infoPopup(pages, "Please specify a * in the 'To:' to differentiate the downloaded files\nfor instance: /tmp/toto_*.tar.gz or /tmp/*/toto.tar.gz")
 			return
 		}
 		successCount := 0

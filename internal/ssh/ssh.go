@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -31,6 +32,30 @@ type SSHConfig struct {
 
 func (c SSHConfig) Endpoint() string {
 	return fmt.Sprintf("%s:%s", c.HostName, c.Port)
+}
+
+//infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
+//	selectedConfigs[i].Host, err))
+
+func InitMultiClients(selectedConfigs []SSHConfig) ([]*cssh.Client, error) {
+	clients := make([]*cssh.Client, len(selectedConfigs))
+	errs := make([]error, len(selectedConfigs))
+	var wg sync.WaitGroup
+
+	wg.Add(len(selectedConfigs))
+	for i := range selectedConfigs {
+		go func(i int) {
+			defer wg.Done()
+			client, err := SSHClient(selectedConfigs[i])
+			if err != nil {
+				errs[i] = err
+			} else {
+				clients[i] = client
+			}
+		}(i)
+	}
+	wg.Wait()
+	return clients, errors.Join(errs...)
 }
 
 func ParseSSHConfig(filePath string) ([]SSHConfig, error) {
