@@ -1,8 +1,8 @@
-# s1h: ssh + scp + passwords encryption unified in one simple tool
+# s1h: ssh + scp + passwords manager unified in one simple CLI
 
-`s1h` is a simple CLI & TUI combo inspired by [K9s](https://github.com/derailed/k9s).
+`s1h` is a simple CLI/TUI tool inspired by [K9s](https://github.com/derailed/k9s).
 
-`s1h` allows you to quickly ssh/scp into configured `ssh` host(s). Either via passwords stored & encrypted locally, or by private keys.
+`s1h` allows you to quickly view, connect, transfer files & execute commands into configured `ssh` host(s). Either via passwords stored & encrypted locally, or by private keys.
 
 ## Installation
 
@@ -17,9 +17,6 @@ Or from the repository:
 # Or build from the repository source
 git clone https://github.com/noboruma/s1h
 cd s1h
-make build
-
-# You can also install directly using Go
 go install ./...
 ```
 
@@ -52,7 +49,7 @@ This command displays a list of available SSH hosts from your `~/.ssh/config`, a
 
 ![main header](.github/assets/header.png)
 
-Let's image you have the following SSH config file (i.e.` ~/.ssh/config`):
+Let's take the following SSH config file (i.e.` ~/.ssh/config`):
 ```
 Host alive-vm
 Hostname ***.**.**.***
@@ -68,37 +65,38 @@ Host alive-vm2
 Hostname ***.***.***.***
 User root
 ```
-Simple execute the following:
+Simply execute the following:
 ```
 s1h
 ```
 ![main output](.github/assets/main.png)
 
-<span style="color:green">Green entries</span> are ssh reachable hosts. <span style="color:green">Red</span> indicates the host are not reachable with the given hostname & port.
+<span style="color:green">Green entries</span> are ssh reachable hosts.
+
+<span style="color:green">Red</span> indicates the host are not reachable with the given hostname & port.
 
 You can search hosts or hostname using repectively `F1` amd `F2` to jump directly to entries:
 
 ![main output](.github/assets/search.png)
 
-- When you press `s` and it will automatically use the configured authentication method (password or SSH key) to establish the connection. This opens a new shell on the remote host.
+- When pressing `s`, it will automatically use the configured authentication method (password or SSH key) to establish the connection. This opens a new shell on the selected remote host.
 
-- When you press `u` it will give the option to upload a file to one or multiple selected host:
+- When pressing `u`, it will give the option to upload a file to one or multiple selected host:
 ![main output](.github/assets/upload.png)
 
-- When you press `d` it will give the option to download a file from one or multiple selected host:
+- When pressing `d`, it will give the option to download a file from one or multiple selected host:
 ![main output](.github/assets/download.png)
 
-- When you press `m` it will select the current entry for multi selection.
+- When pressing `m`, it will select the current entry for multi selection.
 
-- When you press `M` it will select/deselect all multi-select entries.
+- When pressing `M`, it will select/deselect all multi-select entries.
 
-- When you press `e` you can execute a simple command to one or multiple selected host.
+- When pressing `e`, it will can execute a simple command to one or multiple selected host.
 
 ### CLI mode
 
-On top of password management, it is also possible to use `s1h` as a CLI to shell and copy files.
+It is also possible to use `s1h` as a CLI to shell and copy files.
 This approach might be more convenient if you rely on shell history to pass things around.
-Mostly this approach helps with password managements.
 ```
 s1h cp [host1:]/path1 [host2:]/path2
 s1h shell host1
@@ -107,7 +105,8 @@ s1h ip host1
 
 ### What about password?
 
-The `s1h` tool provides options to create an encryption key and update username-password pairs securely. This is useful for host that requires password instead of a key.
+The `s1h` tool provides options to create an encryption key and update username-password pairs securely.
+This is useful for host that requires password instead of a key.
 The encrypted file and the key are stored in the `$HOME/.config/s1h` folder, and can be safely transferred across computer. For maximum security, put your key in a different place.
 
 #### Usage:
