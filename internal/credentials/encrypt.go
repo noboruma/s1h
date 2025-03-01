@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 )
@@ -127,7 +128,7 @@ func saveCredentials(filename string, creds Credentials, key []byte) error {
 	return nil
 }
 
-func UpsertCredentials(filename string, hostname string, password string, key []byte) error {
+func UpsertCredential(filename string, host string, password string, key []byte) error {
 	creds, err := LoadCredentials(filename, key)
 	if err != nil && !os.IsNotExist(err) {
 		return err
@@ -137,18 +138,32 @@ func UpsertCredentials(filename string, hostname string, password string, key []
 		creds.Entries = make(map[string]string)
 	}
 
-	creds.Entries[hostname] = password
+	creds.Entries[host] = password
 
 	return saveCredentials(filename, creds, key)
 }
 
-func RemoveCredentials(filename string, hostname string, key []byte) error {
+func RemoveCredential(filename string, host string, key []byte) error {
 	creds, err := LoadCredentials(filename, key)
 	if err != nil {
 		return err
 	}
 
-	delete(creds.Entries, hostname)
+	delete(creds.Entries, host)
 
 	return saveCredentials(filename, creds, key)
+}
+
+func RevealCredential(filename string, host string, key []byte) (string, error) {
+	creds, err := LoadCredentials(filename, key)
+	if err != nil {
+		return "", err
+	}
+
+	cred, has := creds.Entries[host]
+	if !has {
+		return "", fmt.Errorf("no entry for %s", host)
+	}
+
+	return cred, nil
 }

@@ -1,7 +1,8 @@
-# s1h: ssh + scp in one unified TUI
+# s1h: ssh + scp + encrypted password unified in one simple tool
 
-`s1h` is a simple TUI inspired by [K9s](https://github.com/derailed/k9s).
-`s1h` allows you to quickly ssh/scp into configured hosts, via either passwords stored & encrypted locally, or by private keys.
+`s1h` is a simple CLI & TUI combo inspired by [K9s](https://github.com/derailed/k9s).
+
+`s1h` allows you to quickly ssh/scp into configured `ssh` host(s). Either via passwords stored & encrypted locally, or by private keys.
 
 ## Installation
 
@@ -26,12 +27,12 @@ Or download the binaries directly (choose your os/arch):
 
 ```
 # download the binaries from the release
-wget https://github.com/noboruma/s1h/releases/download/v0.3.0/s1h_Darwin_arm64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.3.0/s1h_Darwin_x86_64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.3.0/s1h_Linux_arm64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.3.0/s1h_Linux_x86_64.tar.gz
-wget https://github.com/noboruma/s1h/releases/download/v0.3.0/s1h_Windows_arm64.zip
-wget https://github.com/noboruma/s1h/releases/download/v0.3.0/s1h_Windows_x86_64.zip
+wget https://github.com/noboruma/s1h/releases/download/v0.3.1/s1h_Darwin_arm64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.3.1/s1h_Darwin_x86_64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.3.1/s1h_Linux_arm64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.3.1/s1h_Linux_x86_64.tar.gz
+wget https://github.com/noboruma/s1h/releases/download/v0.3.1/s1h_Windows_arm64.zip
+wget https://github.com/noboruma/s1h/releases/download/v0.3.1/s1h_Windows_x86_64.zip
 
 tar xvf chosen.tar.gz
 ```
@@ -80,23 +81,23 @@ You can search hosts or hostname using repectively `F1` amd `F4` to jump directl
 
 ![main output](.github/assets/search.png)
 
-- If you press `enter` and it will automatically use the configured authentication method (password or SSH key) to establish the connection. This opens a new shell on the remote host.
+- When you press `enter` and it will automatically use the configured authentication method (password or SSH key) to establish the connection. This opens a new shell on the remote host.
 
-- If you press `c` it will give the option to upload a file to one or multiple selected host:
+- When you press `c` it will give the option to upload a file to one or multiple selected host:
 ![main output](.github/assets/upload.png)
 
-- If you press `C` it will give the option to download a file from one or multiple selected host:
+- When you press `C` it will give the option to download a file from one or multiple selected host:
 ![main output](.github/assets/download.png)
 
-- If you press `m` it will select the current entry for multi selection.
+- When you press `m` it will select the current entry for multi selection.
 
-- If you press `M` it will deselect everything.
+- When you press `M` it will deselect multi-select entries.
 
-- If you press `e` you can execute a simple command to one or multiple selected host.
+- When you press `e` you can execute a simple command to one or multiple selected host.
 
 ### CLI mode
 
-It is also possible to use `s1h` as a CLI to shell and copy files.
+On top of password management, it is also possible to use `s1h` as a CLI to shell and copy files.
 This approach might be more convenient if you rely on shell history to pass things around.
 Mostly this approach helps with password managements.
 ```
@@ -112,9 +113,15 @@ The encrypted file and the key are stored in the `$HOME/.config/s1h` folder, and
 #### Usage:
 
 ```sh
-s1h upsert <host> <password>
+s1h upsert --host=<host> [--password=<password>]
+```
+or
+```sh
+s1h upsert --host=<host>
+Enter password for <host>:
 ```
 This updates the stored credentials for the specified ssh host.
+`s1h` comes with other password operations: `reveal` and `delete`.
 
 #### Example:
 

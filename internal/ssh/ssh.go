@@ -259,10 +259,11 @@ func ExecuteSSHShell(cfg SSHConfig) error {
 	}
 	defer term.Restore(int(os.Stdin.Fd()), oldState)
 
-	// set terminal size based on current window size
+	// Clear the screen to get scrollback height
+	clearScreen()
+
 	width, height, err := term.GetSize(int(os.Stdin.Fd()))
 	if err != nil {
-		// on error set default width and height
 		width = 80
 		height = 40
 	}
@@ -358,4 +359,8 @@ func ExecCommand(client *ssh.Client, command string) ([]byte, error) {
 	}
 	defer sess.Close()
 	return sess.CombinedOutput(command)
+}
+
+func clearScreen() {
+	fmt.Print("\033[H\033[2J")
 }

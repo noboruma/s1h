@@ -12,6 +12,7 @@ import (
 	"github.com/noboruma/s1h/internal/credentials"
 	"github.com/noboruma/s1h/internal/ssh"
 	"github.com/noboruma/s1h/internal/tui"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 var Version string
@@ -38,21 +39,30 @@ func main() {
 		key, credsFile := loadOrStoreLocalEncryptedFile()
 		switch os.Args[1] {
 		case "upsert":
-			var hostname, password string
+			var host, password string
 			updateCmd := flag.NewFlagSet("upsert", flag.ExitOnError)
-			updateCmd.StringVar(&hostname, "hostname", "", "The hostname to update")
-			updateCmd.StringVar(&password, "password", "", "The password to set for the hostname")
+			updateCmd.StringVar(&host, "host", "", "The host to update")
+			updateCmd.StringVar(&password, "password", "", "The password to set for the host (optional)")
 			err := updateCmd.Parse(os.Args[2:])
 			if err != nil {
 				fmt.Println("Error upading credentials:", err.Error())
 				os.Exit(1)
 			}
-			if hostname == "" || password == "" {
-				fmt.Println("Please provide both hostname and password.")
+			if host == "" {
+				fmt.Println("Please provide an host.")
 				os.Exit(1)
 			}
+			if password == "" {
+				fmt.Printf("Enter password for %s:", host)
+				bytePassword, err := terminal.ReadPassword(int(os.Stdin.Fd()))
+				if err != nil {
+					fmt.Println("Error reading password:", err)
+					return
+				}
+				password = string(bytePassword)
+			}
 
-			err = credentials.UpsertCredentials(credsFile, hostname, password, key)
+			err = credentials.UpsertCredential(credsFile, host, password, key)
 			if err != nil {
 				fmt.Println("Error updating credentials:", err)
 				os.Exit(1)
@@ -61,29 +71,44 @@ func main() {
 			fmt.Println("Credentials updated.")
 			return
 		case "remove":
-			var hostname string
+			var host string
 			removeCmd := flag.NewFlagSet("remove", flag.ExitOnError)
-			removeCmd.StringVar(&hostname, "hostname", "", "The hostname to remove")
+			removeCmd.StringVar(&host, "host", "", "The host to remove")
 			err := removeCmd.Parse(os.Args[2:])
 			if err != nil {
 				fmt.Println("Error remote:", err)
 				os.Exit(1)
 			}
-			if hostname == "" {
-				fmt.Println("Please provide the hostname to remove.")
+			if host == "" {
+				fmt.Println("Please provide the host to remove.")
 				os.Exit(1)
 			}
-			err = credentials.RemoveCredentials(credsFile, hostname, key)
+			err = credentials.RemoveCredential(credsFile, host, key)
 			if err != nil {
 				fmt.Println("Error removing credentials:", err.Error())
 				os.Exit(1)
 			}
+			fmt.Println("Credentials removed.")
+			return
+		case "reveal":
+			var host string
+			revealCmd := flag.NewFlagSet("reveal", flag.ExitOnError)
+			revealCmd.StringVar(&host, "host", "", "The host to be revealed")
+			err := revealCmd.Parse(os.Args[2:])
 			if err != nil {
-				fmt.Println("Error removing credentials:", err)
+				fmt.Println("Error remote:", err)
 				os.Exit(1)
 			}
-
-			fmt.Println("Credentials removed.")
+			if host == "" {
+				fmt.Println("Please provide the hostname to reveal.")
+				os.Exit(1)
+			}
+			pass, err := credentials.RevealCredential(credsFile, host, key)
+			if err != nil {
+				fmt.Println("Error retrieving credential:", err.Error())
+				os.Exit(1)
+			}
+			fmt.Println(pass)
 			return
 		case "cp":
 			if len(os.Args) != 4 || os.Args[2] == "" || os.Args[3] == "" {
@@ -131,7 +156,7 @@ func main() {
 func loadConfigs() []ssh.SSHConfig {
 	configPath := os.Getenv("SSH_CONFIG")
 	if configPath == "" {
-		configPath = os.Getenv("HOME") + "/.ssh/config"
+		configPath = filepath.Join(os.Getenv("HOME"), ".ssh", "config")
 	}
 
 	configs, err := ssh.ParseSSHConfig(configPath)
