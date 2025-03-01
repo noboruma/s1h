@@ -1,4 +1,4 @@
-# s1h: ssh + scp + encrypted password unified in one simple tool
+# s1h: ssh + scp + passwords encryption unified in one simple tool
 
 `s1h` is a simple CLI & TUI combo inspired by [K9s](https://github.com/derailed/k9s).
 
