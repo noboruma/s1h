@@ -277,7 +277,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 					table.GetCell(i, 0).SetBackgroundColor(tcell.ColorBlue)
 					multiSelectConfigs = append(multiSelectConfigs, configs[i])
 				}
-			}else if len(multiSelectConfigs) == len(configs) {
+			} else if len(multiSelectConfigs) == len(configs) {
 				for row := 0; row < table.GetRowCount(); row++ {
 					table.GetCell(row, 0).SetBackgroundColor(tcell.ColorNone)
 				}
@@ -453,7 +453,7 @@ func singleCopyTo(pages *tview.Pages, selectedConfig ssh.SSHConfig) {
 			From: fromField.GetText(),
 			To:   toField.GetText(),
 		})
-		err := ssh.UploadFile(client, fromField.GetText(), toField.GetText())
+		err := ssh.UploadFile(client, fromField.GetText(), toField.GetText(), nil)
 		pages.RemovePage("popup")
 		if err != nil {
 			infoPopup(pages,
@@ -495,7 +495,7 @@ func multiCopyTo(pages *tview.Pages, selectedConfigs []ssh.SSHConfig) {
 				From: fromField.GetText(),
 				To:   toField.GetText(),
 			})
-			err := ssh.UploadFile(clients[i], fromField.GetText(), toField.GetText())
+			err := ssh.UploadFile(clients[i], fromField.GetText(), toField.GetText(), nil)
 			if err != nil {
 				infoPopup(pages,
 					fmt.Sprintf("Error uploading %s -> %s: %v",
@@ -612,7 +612,7 @@ func singleCopyFrom(pages *tview.Pages, selectedConfig ssh.SSHConfig) {
 			From: fromField.GetText(),
 			To:   toField.GetText(),
 		})
-		err := ssh.DownloadFile(client, fromField.GetText(), toField.GetText())
+		err := ssh.DownloadFile(client, fromField.GetText(), toField.GetText(), nil)
 		pages.RemovePage("popup")
 		if err != nil {
 			infoPopup(pages,
@@ -659,7 +659,7 @@ func multiCopyFrom(pages *tview.Pages, selectedConfigs []ssh.SSHConfig) {
 				To:   toField.GetText(),
 			})
 			toPath := strings.ReplaceAll(toField.GetText(), "*", selectedConfigs[i].Host)
-			err := ssh.DownloadFile(clients[i], fromField.GetText(), toPath)
+			err := ssh.DownloadFile(clients[i], fromField.GetText(), toPath, nil)
 			if err != nil {
 				infoPopup(pages,
 					fmt.Sprintf("Error downloading %s -> %s: %v",

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -311,7 +312,7 @@ func ExecuteSSHShell(cfg SSHConfig) error {
 	return nil
 }
 
-func UploadFile(client *ssh.Client, localFile, remotePath string) error {
+func UploadFile(client *ssh.Client, localFile, remotePath string, progress ProgressDisplayer) error {
 	sftpClient, err := sftp.NewClient(client)
 	if err != nil {
 		return fmt.Errorf("failed to create SFTP client: %w", err)
@@ -336,7 +337,13 @@ func UploadFile(client *ssh.Client, localFile, remotePath string) error {
 	}
 	defer dstFile.Close()
 
-	_, err = dstFile.ReadFromWithConcurrency(srcFile, 0)
+	if progress != nil {
+		stat, _ := srcFile.Stat()
+		progress.SetTotalSize(stat.Size())
+		_, err = dstFile.ReadFromWithConcurrency(io.TeeReader(srcFile, progress), 0)
+	} else {
+		_, err = dstFile.ReadFromWithConcurrency(srcFile, 0)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to copy file content: %w", err)
 	}
@@ -344,7 +351,12 @@ func UploadFile(client *ssh.Client, localFile, remotePath string) error {
 	return nil
 }
 
-func DownloadFile(client *ssh.Client, remotePath, localFile string) error {
+type ProgressDisplayer interface {
+	SetTotalSize(int64)
+	io.Writer
+}
+
+func DownloadFile(client *ssh.Client, remotePath, localFile string, progress ProgressDisplayer) error {
 	sftpClient, err := sftp.NewClient(client)
 	if err != nil {
 		return fmt.Errorf("failed to create SFTP client: %w", err)
@@ -369,7 +381,13 @@ func DownloadFile(client *ssh.Client, remotePath, localFile string) error {
 	}
 	defer localFileHandle.Close()
 
-	_, err = remoteFile.WriteTo(localFileHandle)
+	if progress != nil {
+		stat, _ := remoteFile.Stat()
+		progress.SetTotalSize(stat.Size())
+		_, err = io.Copy(localFileHandle, io.TeeReader(remoteFile, progress))
+	} else {
+		_, err = remoteFile.WriteTo(localFileHandle)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to copy file content: %w", err)
 	}
