@@ -288,7 +288,7 @@ func ExecuteSSHShell(cfg SSHConfig) error {
 	// Clear the screen to get scrollback height
 	clearScreen()
 
-	width, height, err := term.GetSize(int(os.Stdin.Fd()))
+	width, height, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
 		width = 80
 		height = 40
