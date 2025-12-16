@@ -21,7 +21,11 @@ func extractHost(endpoint string) string {
 }
 
 func removeSlashes(input string) string {
-	return strings.ReplaceAll(input, fmt.Sprintf("%c", os.PathSeparator), "")
+	return strings.ReplaceAll(
+		strings.ReplaceAll(
+			strings.ReplaceAll(input, fmt.Sprintf("%c", os.PathSeparator), "_"),
+			"@", "_"),
+		":", "_")
 }
 
 func extractPath(endpoint string) string {

@@ -9,11 +9,13 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
 	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -275,6 +277,9 @@ func ExecuteSSHShell(cfg SSHConfig) error {
 	}
 	defer session.Close()
 
+	// Clear the screen to get scrollback height
+	clearScreen()
+
 	session.Stdout = os.Stdout
 	session.Stderr = os.Stderr
 	session.Stdin = os.Stdin
@@ -285,31 +290,41 @@ func ExecuteSSHShell(cfg SSHConfig) error {
 	}
 	defer term.Restore(int(os.Stdin.Fd()), oldState)
 
-	// Clear the screen to get scrollback height
-	clearScreen()
-
-	width, height, err := term.GetSize(int(os.Stdout.Fd()))
+	width, height, err := term.GetSize(int(os.Stdin.Fd()))
 	if err != nil {
 		width = 80
-		height = 40
+		height = 24
 	}
 
-	err = session.RequestPty("xterm-256color", height, width, cssh.TerminalModes{
-		ssh.ECHO:          1,
-		ssh.TTY_OP_ISPEED: 14400,
-		ssh.TTY_OP_OSPEED: 14400,
-	})
+	err = session.RequestPty("xterm-256color",
+		height, width,
+		cssh.TerminalModes{
+			ssh.ECHO:          1,
+			ssh.TTY_OP_ISPEED: 14400,
+			ssh.TTY_OP_OSPEED: 14400,
+		})
 	if err != nil {
 		return err
 	}
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGWINCH)
+
+	go func() {
+		for range sigCh {
+			w, h, err := term.GetSize(int(os.Stdin.Fd()))
+			if err == nil {
+				_ = session.WindowChange(h, w)
+			}
+		}
+	}()
 
 	err = session.Shell()
 	if err != nil {
 		return err
 	}
 
-	_ = session.Wait()
-	return nil
+	return session.Wait()
 }
 
 func UploadFile(client *ssh.Client, localFile, remotePath string, progress ProgressDisplayer) error {
