@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 )
 
 type Entry struct {
@@ -43,24 +45,24 @@ func LoadMasterKey(filename string) ([]byte, error) {
 	return key, nil
 }
 
+// Files without this prefix use the legacy AES-CBC format.
+var gcmMagic = []byte("s1h-gcm1")
+
 func encrypt(data []byte, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
 	}
-
-	iv := make([]byte, aes.BlockSize)
-	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
 		return nil, err
 	}
-
-	stream := cipher.NewCBCEncrypter(block, iv)
-	padding := make([]byte, aes.BlockSize-len(data)%aes.BlockSize)
-	data = append(data, padding...) // PKCS#7 padding
-	stream.CryptBlocks(data, data)
-
-	encrypted := append(iv, data...)
-	return encrypted, nil
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, err
+	}
+	out := append(append([]byte{}, gcmMagic...), nonce...)
+	return gcm.Seal(out, nonce, data, gcmMagic), nil
 }
 
 func decrypt(encrypted []byte, key []byte) ([]byte, error) {
@@ -68,29 +70,38 @@ func decrypt(encrypted []byte, key []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	if len(encrypted) < aes.BlockSize {
-		return nil, errors.New("encrypted data too short")
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
 	}
-
-	iv := encrypted[:aes.BlockSize]
-	encrypted = encrypted[aes.BlockSize:]
-
-	stream := cipher.NewCBCDecrypter(block, iv)
-	stream.CryptBlocks(encrypted, encrypted)
-
-	padding := int(encrypted[len(encrypted)-1])
-	encrypted = encrypted[:len(encrypted)-padding]
-
-	return encrypted, nil
+	encrypted = encrypted[len(gcmMagic):]
+	if len(encrypted) < gcm.NonceSize()+gcm.Overhead() {
+		return nil, errors.New("credentials file is truncated")
+	}
+	nonce, sealed := encrypted[:gcm.NonceSize()], encrypted[gcm.NonceSize():]
+	plain, err := gcm.Open(nil, nonce, sealed, gcmMagic)
+	if err != nil {
+		return nil, errors.New("credentials file is corrupted or was encrypted with another key")
+	}
+	return plain, nil
 }
-func LastIndex(data []byte, b byte) int {
-	for i := len(data) - 1; i >= 0; i-- {
-		if data[i] == b {
-			return i
-		}
+
+func decryptLegacyCBC(encrypted []byte, key []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
 	}
-	return -1
+	if len(encrypted) < 2*aes.BlockSize || len(encrypted)%aes.BlockSize != 0 {
+		return nil, errors.New("credentials file is truncated or corrupted")
+	}
+	iv, data := encrypted[:aes.BlockSize], append([]byte{}, encrypted[aes.BlockSize:]...)
+	cipher.NewCBCDecrypter(block, iv).CryptBlocks(data, data)
+
+	n := bytes.LastIndexByte(data, '}')
+	if n == -1 {
+		return nil, errors.New("credentials file is corrupted or was encrypted with another key")
+	}
+	return data[:n+1], nil
 }
 
 func LoadCredentials(filename string, key []byte) (Credentials, error) {
@@ -101,18 +112,24 @@ func LoadCredentials(filename string, key []byte) (Credentials, error) {
 		return creds, err
 	}
 
-	decrypted, err := decrypt(encrypted, key)
+	legacy := !bytes.HasPrefix(encrypted, gcmMagic)
+	var decrypted []byte
+	if legacy {
+		decrypted, err = decryptLegacyCBC(encrypted, key)
+	} else {
+		decrypted, err = decrypt(encrypted, key)
+	}
 	if err != nil {
 		return creds, err
 	}
 
-	n := LastIndex(decrypted, byte('}'))
-
-	err = json.Unmarshal(decrypted[:n+1], &creds)
-	if err != nil {
-		return creds, err
+	if err := json.Unmarshal(decrypted, &creds); err != nil {
+		return creds, fmt.Errorf("credentials file is corrupted: %w", err)
 	}
 
+	if legacy {
+		_ = saveCredentials(filename, creds, key)
+	}
 	return creds, nil
 }
 
@@ -127,12 +144,19 @@ func saveCredentials(filename string, creds Credentials, key []byte) error {
 		return err
 	}
 
-	err = os.WriteFile(filename, encryptedData, 0600)
+	tmp, err := os.CreateTemp(filepath.Dir(filename), ".credentials-*.tmp")
 	if err != nil {
 		return err
 	}
-
-	return nil
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(encryptedData); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), filename)
 }
 
 func UpsertCredential(filename string, host, hostname, user, port string, password string, key []byte) error {
@@ -181,4 +205,36 @@ func RevealCredentialPassword(filename string, host string, key []byte) (string,
 	}
 
 	return cred.Password, nil
+}
+
+func SetPassword(filename string, host string, password string, key []byte) error {
+	creds, err := LoadCredentials(filename, key)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if creds.Entries == nil {
+		creds.Entries = make(map[string]Entry)
+	}
+
+	entry := creds.Entries[host]
+	entry.Password = password
+	if entry.Password == "" && entry.Hostname == "" {
+		delete(creds.Entries, host)
+	} else {
+		creds.Entries[host] = entry
+	}
+
+	return saveCredentials(filename, creds, key)
+}
+
+func PutEntry(filename string, host string, entry Entry, key []byte) error {
+	creds, err := LoadCredentials(filename, key)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if creds.Entries == nil {
+		creds.Entries = make(map[string]Entry)
+	}
+	creds.Entries[host] = entry
+	return saveCredentials(filename, creds, key)
 }

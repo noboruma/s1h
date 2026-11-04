@@ -1,4 +1,4 @@
-# goreleaser dist directory
+# release build output
 dist/
 s1h
 s1hpass

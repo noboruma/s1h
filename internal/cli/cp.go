@@ -53,7 +53,7 @@ func Copy(configs []ssh.SSHConfig, left, right string) error {
 	var leftConfig, rightConfig ssh.SSHConfig
 	var err error
 	progress := progressWriter{startTime: time.Now()}
-	if leftHost != "" { // remote -> local | remote
+	if leftHost != "" {
 		var has bool
 		leftConfig, has = findConfig(configs, leftHost)
 		if !has {
@@ -64,7 +64,7 @@ func Copy(configs []ssh.SSHConfig, left, right string) error {
 			return err
 		}
 
-		if rightHost != "" { // remote -> remote
+		if rightHost != "" {
 			rightConfig, has = findConfig(configs, rightHost)
 			if !has {
 				return fmt.Errorf("config %s not found", rightHost)
@@ -81,10 +81,10 @@ func Copy(configs []ssh.SSHConfig, left, right string) error {
 			}
 			defer os.Remove(tempPath)
 			err = ssh.UploadFile(rightClient, tempPath, extractPath(right), &progress)
-		} else { // remote -> local
+		} else {
 			err = ssh.DownloadFile(leftClient, extractPath(left), right, &progress)
 		}
-	} else { // local -> remote
+	} else {
 		var has bool
 		rightConfig, has = findConfig(configs, rightHost)
 		if !has {

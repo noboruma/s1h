@@ -31,14 +31,12 @@ type SSHConfig struct {
 	HostName     string
 	IdentityFile string
 	Password     string
+	Managed      bool
 }
 
 func (c SSHConfig) Endpoint() string {
 	return fmt.Sprintf("%s:%s", c.HostName, c.Port)
 }
-
-//infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
-//	selectedConfigs[i].Host, err))
 
 func InitMultiClients(selectedConfigs []SSHConfig) ([]*cssh.Client, error) {
 	clients := make([]*cssh.Client, len(selectedConfigs))
@@ -84,7 +82,6 @@ func ParseSSHConfig(filePath string) ([]SSHConfig, error) {
 			if inHostSection {
 				configs = append(configs, currentConfig)
 			}
-			// skip if host has * in it
 			if strings.Contains(line, "*") {
 				continue
 			}
@@ -277,7 +274,6 @@ func ExecuteSSHShell(cfg SSHConfig) error {
 	}
 	defer session.Close()
 
-	// Clear the screen to get scrollback height
 	clearScreen()
 
 	session.Stdout = os.Stdout

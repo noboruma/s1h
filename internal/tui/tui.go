@@ -14,19 +14,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-var (
-	autoCompleteHostNames []string
-	autoCompleteHosts     []string
-	multiSelectConfigs    []ssh.SSHConfig
-)
-
-func PopulateAutocompleteCaches(configs []ssh.SSHConfig) {
-	for _, cfg := range configs {
-		autoCompleteHosts = append(autoCompleteHosts, cfg.Host)
-		autoCompleteHostNames = append(autoCompleteHostNames, cfg.HostName)
-	}
-}
-
 func DisplaySSHConfig(configs []ssh.SSHConfig) {
 	app := tview.NewApplication()
 
@@ -43,165 +30,108 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 	pages := tview.NewPages()
 	root := tview.NewFlex().SetDirection(tview.FlexRow)
 
-	header := tview.NewTable()
-	header.SetCell(0, 0, tview.NewTableCell("Commands").
-		SetTextColor(tcell.ColorYellow).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	header.SetCell(1, 0, tview.NewTableCell("u:").
-		SetTextColor(tcell.ColorYellow).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	header.SetCell(1, 1, tview.NewTableCell("Upload local file to selected remote host(s)").
-		SetTextColor(tcell.ColorPurple).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	header.SetCell(2, 0, tview.NewTableCell("d:").
-		SetTextColor(tcell.ColorYellow).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	header.SetCell(2, 1, tview.NewTableCell("Download file(s) from  selected remote host(s)").
-		SetTextColor(tcell.ColorPurple).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	header.SetCell(3, 0, tview.NewTableCell("s:").
-		SetTextColor(tcell.ColorYellow).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	header.SetCell(3, 1, tview.NewTableCell("Shell to selected host").
-		SetTextColor(tcell.ColorPurple).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	header.SetCell(4, 0, tview.NewTableCell("m:").
-		SetTextColor(tcell.ColorBlue).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	header.SetCell(4, 1, tview.NewTableCell("Multi select host (toggle)").
-		SetTextColor(tcell.ColorPurple).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	header.SetCell(5, 0, tview.NewTableCell("M:").
-		SetTextColor(tcell.ColorBlue).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	header.SetCell(5, 1, tview.NewTableCell("Select/Clear all multi selected hosts").
-		SetTextColor(tcell.ColorPurple).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	header.SetCell(6, 0, tview.NewTableCell("e:").
-		SetTextColor(tcell.ColorYellow).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	header.SetCell(6, 1, tview.NewTableCell("Execute short-lived command").
-		SetTextColor(tcell.ColorPurple).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
+	table := newHostTable(configs)
 
-	root.AddItem(header, 7, 2, false)
+	info := tview.NewTextView().SetDynamicColors(true)
+	refreshInfo := func() {
+		info.SetText(headerInfo(len(table.visible), len(table.hosts),
+			table.ReachableCount(), len(table.Marked())))
+	}
+	refreshInfo()
 
-	tableHeader := tview.NewTable().
-		SetSeparator('|').
-		SetBorders(false).
-		SetSelectable(false, false)
+	logo := tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignRight).
+		SetText(logoText())
 
-	tableHeader.SetCell(0, 0, tview.NewTableCell("Host (F1)").
-		SetTextColor(tcell.ColorBlue).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	tableHeader.SetCell(0, 1, tview.NewTableCell("HostName (F2)").
-		SetTextColor(tcell.ColorRed).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	tableHeader.SetCell(0, 2, tview.NewTableCell("Port").
-		SetTextColor(tcell.ColorGreen).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	tableHeader.SetCell(0, 3, tview.NewTableCell("User").
-		SetTextColor(tcell.ColorBlueViolet).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
-	tableHeader.SetCell(0, 4, tview.NewTableCell("Auth").
-		SetTextColor(tcell.ColorBlue).
-		SetAlign(tview.AlignLeft).
-		SetSelectable(false))
+	header := tview.NewFlex().
+		AddItem(info, 0, 1, false).
+		AddItem(logo, logoWidth+1, 0, false)
 
-	root.AddItem(tableHeader, 1, 5, false)
+	filterInput := tview.NewInputField().
+		SetLabel(" / ").
+		SetLabelColor(tcell.ColorYellow).
+		SetFieldBackgroundColor(tcell.ColorDefault)
+	filterRow := tview.NewFlex().SetDirection(tview.FlexRow)
 
-	root.AddItem(pages, 0, 15, true)
+	root.AddItem(header, len(logoLines), 0, false)
+	root.AddItem(filterRow, 0, 0, false)
+	root.AddItem(pages, 0, 1, true)
 
-	table := tview.NewTable().
-		SetBorders(false).
-		SetSelectable(true, false)
+	footer := tview.NewTextView().
+		SetDynamicColors(true).
+		SetWrap(false)
+	footer.SetBackgroundColor(footerBg)
+	root.AddItem(footer, 1, 0, false)
+	footerWidth := -1
+	app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
+		if w, _ := screen.Size(); w != footerWidth {
+			footerWidth = w
+			text, lines := footerText(w)
+			footer.SetText(text)
+			root.ResizeItem(footer, lines, 0)
+		}
+		return false
+	})
 
-	reachables := make([]atomic.Bool, len(configs))
-	for i, config := range configs {
-		table.SetCell(i, 0, tview.NewTableCell(config.Host).
-			SetAlign(tview.AlignLeft))
-		table.SetCell(i, 1, tview.NewTableCell(config.HostName).
-			SetAlign(tview.AlignLeft))
-		table.SetCell(i, 2, tview.NewTableCell(config.Port).
-			SetAlign(tview.AlignLeft))
-		table.SetCell(i, 3, tview.NewTableCell(config.User).
-			SetAlign(tview.AlignLeft))
-		if config.Password != "" && config.IdentityFile == "" {
-			table.SetCell(i, 4, tview.NewTableCell("Passwd").
-				SetAlign(tview.AlignLeft))
-		} else if config.IdentityFile != "" {
-			table.SetCell(i, 4, tview.NewTableCell("Key").
-				SetAlign(tview.AlignLeft))
+	showFilter := func(show bool) {
+		filterRow.Clear()
+		if show {
+			filterRow.AddItem(filterInput, 1, 0, false)
+			root.ResizeItem(filterRow, 1, 0)
 		} else {
-			table.SetCell(i, 4, tview.NewTableCell("All").
-				SetAlign(tview.AlignLeft))
+			root.ResizeItem(filterRow, 0, 0)
 		}
 	}
+	applyFilter := func(text string) {
+		table.SetFilter(text)
+		refreshInfo()
+	}
+	filterInput.SetChangedFunc(applyFilter)
+	filterInput.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEscape {
+			filterInput.SetText("")
+		}
+		showFilter(filterInput.GetText() != "")
+		app.SetFocus(table)
+	})
 
-	go reachabilityCheck(configs, reachables, table, app)
+	check := func(h *hostEntry) { go checkHost(h, app, table, refreshInfo) }
+	go reachabilityCheck(table, check)
+	go spinStatus(table, app)
 
-	//table.SetSelectedFunc(func(row, column int) {
-	//	selectedConfig := configs[row]
-
-	//	pages.AddPage("popup", sshPage, true, true)
-	//	app.Suspend(func() {
-	//		err := ssh.ExecuteSSHShell(selectedConfig)
-	//		pages.RemovePage("popup")
-	//		if err != nil {
-	//			infoPopup(pages, fmt.Sprintf("Error accessing ssh for Host %s: %v",
-	//				selectedConfig.Host, err))
-	//		}
-	//	})
-	//})
+	ui := &hostUI{app: app, pages: pages, table: table, refresh: refreshInfo, check: check}
 
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if app.GetFocus() == filterInput {
+			return event
+		}
 		defer app.Sync()
 		switch event.Key() {
 		case tcell.KeyEscape:
 			if pages.HasPage("popup") {
 				pages.RemovePage("popup")
+			} else if table.filter != "" {
+				filterInput.SetText("")
+				showFilter(false)
 			} else {
 				app.Stop()
 			}
-		case tcell.KeyF2:
-			searchFilterPopup("HostName", pages, table, configs,
-				func(cfg ssh.SSHConfig, match string) bool {
-					return cfg.HostName == match
-				}, autoCompleteHostNames)
-		case tcell.KeyF1:
-			searchFilterPopup("Host", pages, table, configs,
-				func(cfg ssh.SSHConfig, match string) bool {
-					return cfg.Host == match
-				}, autoCompleteHosts)
+			return nil
 		}
+		if pages.HasPage("popup") {
+			return event
+		}
+		h, ok := table.Selected()
+		marked := table.Marked()
 		switch event.Rune() {
 		case 'q':
-			if !pages.HasPage("popup") {
-				app.Stop()
+			app.Stop()
+		case 's':
+			if !ok {
+				return nil
 			}
-		case 's': // shell into
-			if pages.HasPage("popup") {
-				return event
-			}
-			row, _ := table.GetSelection()
-			selectedConfig := configs[row]
+			selectedConfig := h.cfg
 			pages.AddPage("popup", sshPage, true, true)
 			app.Suspend(func() {
 				appSuspended.Store(true)
@@ -214,143 +144,138 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 				}
 			})
 			return nil
-		case 'u': // copy to
-			if pages.HasPage("popup") {
-				return event
-			}
-			if len(multiSelectConfigs) != 0 {
-				multiCopyTo(pages, multiSelectConfigs)
-			} else {
-				row, _ := table.GetSelection()
-				selectedConfig := configs[row]
-				singleCopyTo(pages, selectedConfig)
+		case 'u':
+			if len(marked) != 0 {
+				multiCopyTo(pages, marked)
+			} else if ok {
+				singleCopyTo(pages, h.cfg)
 			}
 			return nil
-		case 'd': // copy from
-			if pages.HasPage("popup") {
-				return event
+		case 'd':
+			if len(marked) != 0 {
+				multiCopyFrom(pages, marked)
+			} else if ok {
+				singleCopyFrom(pages, h.cfg)
 			}
-			if len(multiSelectConfigs) != 0 {
-				multiCopyFrom(pages, multiSelectConfigs)
-			} else {
-				row, _ := table.GetSelection()
-				selectedConfig := configs[row]
-				singleCopyFrom(pages, selectedConfig)
+			return nil
+		case 'x':
+			if len(marked) != 0 {
+				multiExecOn(pages, marked)
+			} else if ok {
+				singleExecOn(pages, h.cfg)
 			}
 			return nil
 		case 'm':
-			if pages.HasPage("popup") {
-				return event
-			}
-			row, _ := table.GetSelection()
-			selectedConfig := configs[row]
-			if !reachables[row].Load() {
-				infoPopup(pages, fmt.Sprintf("Host %s: is not reachable", selectedConfig.Host))
+			if !ok {
 				return nil
 			}
-
-			found := -1
-			for i := range multiSelectConfigs {
-				if multiSelectConfigs[i].Host == selectedConfig.Host {
-					found = i
-					break
-				}
+			if !h.marked && !h.reachable.Load() {
+				infoPopup(pages, fmt.Sprintf("Host %s: is not reachable", h.cfg.Host))
+				return nil
 			}
-			if found == -1 {
-				multiSelectConfigs = append(multiSelectConfigs, selectedConfig)
-				table.GetCell(row, 0).SetBackgroundColor(tcell.ColorBlue)
-			} else {
-				multiSelectConfigs[found] = multiSelectConfigs[len(multiSelectConfigs)-1]
-				multiSelectConfigs = multiSelectConfigs[:len(multiSelectConfigs)-1]
-				table.GetCell(row, 0).SetBackgroundColor(tcell.ColorNone)
-			}
+			h.marked = !h.marked
+			table.Render()
+			refreshInfo()
 			return nil
 		case 'M':
-			if pages.HasPage("popup") {
-				return event
-			}
-			if len(multiSelectConfigs) == 0 {
-				for i := range configs {
-					if !reachables[i].Load() {
-						continue
-					}
-					table.GetCell(i, 0).SetBackgroundColor(tcell.ColorBlue)
-					multiSelectConfigs = append(multiSelectConfigs, configs[i])
+			if len(marked) == 0 {
+				for _, v := range table.visible {
+					v.marked = v.reachable.Load()
 				}
-			} else if len(multiSelectConfigs) == len(configs) {
-				for row := 0; row < table.GetRowCount(); row++ {
-					table.GetCell(row, 0).SetBackgroundColor(tcell.ColorNone)
-				}
-				multiSelectConfigs = multiSelectConfigs[:0]
 			} else {
-				for i := range multiSelectConfigs {
-					for row := 0; row < table.GetRowCount(); row++ {
-						selectedConfig := configs[row]
-						if multiSelectConfigs[i].Host == selectedConfig.Host {
-							table.GetCell(row, 0).SetBackgroundColor(tcell.ColorNone)
-							break
-						}
-					}
+				for _, v := range table.hosts {
+					v.marked = false
 				}
-				multiSelectConfigs = multiSelectConfigs[:0]
 			}
+			table.Render()
+			refreshInfo()
 			return nil
 		case 'e':
-			if pages.HasPage("popup") {
-				return event
-			}
-			if len(multiSelectConfigs) != 0 {
-				multiExecOn(pages, multiSelectConfigs)
-			} else {
-				row, _ := table.GetSelection()
-				selectedConfig := configs[row]
-				singleExecOn(pages, selectedConfig)
+			if ok {
+				ui.editPopup(h)
 			}
 			return nil
-		case '/':
-			fallthrough
-		case '?':
-			if pages.HasPage("popup") {
-				return event
+		case '+':
+			ui.addPopup()
+			return nil
+		case '-':
+			if ok {
+				ui.removePopup(h)
 			}
-			searchFilterPopup("Host", pages, table, configs,
-				func(cfg ssh.SSHConfig, match string) bool {
-					return cfg.Host == match
-				}, autoCompleteHosts)
+			return nil
+		case 'r':
+			if !ok {
+				return nil
+			}
+			if h.cfg.Password == "" {
+				infoPopup(pages, fmt.Sprintf("No stored password for %s", h.cfg.Host))
+			} else {
+				infoPopup(pages, fmt.Sprintf("Password for %s:\n\n%s", h.cfg.Host, tview.Escape(h.cfg.Password)))
+			}
+			return nil
+		case '/', '?':
+			showFilter(true)
+			app.SetFocus(filterInput)
 			return nil
 		}
 		return event
 	})
 
 	pages.AddPage("main", table, true, true)
+	if StartupWarning != "" {
+		infoPopup(pages, StartupWarning)
+	}
 
-	if err := app.SetRoot(root, true).SetFocus(pages).Run(); err != nil {
+	if err := app.SetRoot(root, true).SetFocus(table).Run(); err != nil {
 		panic(err)
 	}
 }
 
 var appSuspended atomic.Bool
 
-func reachabilityCheck(configs []ssh.SSHConfig, reachables []atomic.Bool, table *tview.Table, app *tview.Application) {
+func reachabilityCheck(table *hostTable, check func(*hostEntry)) {
 	for ; ; <-time.After(2 * time.Minute) {
-		for i, config := range configs {
-			port, err := strconv.Atoi(config.Port)
-			if err != nil {
-				port = 22
-			}
-			go func(i int) {
-				if ssh.CheckSSHPort(config.HostName, port, 10*time.Second) {
-					table.GetCell(i, 0).SetTextColor(tcell.ColorDarkGreen)
-					reachables[i].Store(true)
-				} else {
-					table.GetCell(i, 0).SetTextColor(tcell.ColorDarkRed)
-					reachables[i].Store(false)
-				}
-				if !appSuspended.Load() {
-					app.Draw()
-				}
-			}(i)
+		for _, h := range table.Snapshot() {
+			check(h)
 		}
+	}
+}
+
+func checkHost(h *hostEntry, app *tview.Application, table *hostTable, onUpdate func()) {
+	var hostname, portStr string
+	done := make(chan struct{})
+	app.QueueUpdate(func() {
+		hostname, portStr = h.cfg.HostName, h.cfg.Port
+		close(done)
+	})
+	<-done
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		port = 22
+	}
+	ok := ssh.CheckSSHPort(hostname, port, 10*time.Second)
+	h.reachable.Store(ok)
+	h.checked.Store(true)
+	app.QueueUpdateDraw(func() {
+		if !ok {
+			h.marked = false
+		}
+		table.Render()
+		onUpdate()
+	})
+}
+
+func spinStatus(table *hostTable, app *tview.Application) {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for range ticker.C {
+		if appSuspended.Load() || !table.Pending() {
+			continue
+		}
+		app.QueueUpdateDraw(func() {
+			table.frame++
+			table.Render()
+		})
 	}
 }
 
@@ -397,38 +322,14 @@ func infoPopup(pages *tview.Pages, msg string) {
 	pages.AddPage("popup", popup, false, true)
 }
 
-func searchFilterPopup(fieldName string, pages *tview.Pages, table *tview.Table,
-	configs []ssh.SSHConfig,
-	match func(cfg ssh.SSHConfig, inputText string) bool,
-	autoCompleteEntries []string) {
-	popup := tview.NewInputField()
-	popup.SetLabel(fmt.Sprintf("Search %s: ", fieldName)).SetDoneFunc(func(buttonIndex tcell.Key) {
-		hostname := ""
-		if buttonIndex == tcell.KeyEnter {
-			hostname = popup.GetText()
-		}
-		if hostname != "" {
-			for i, cfg := range configs {
-				if match(cfg, hostname) {
-					table.Select(i, 0)
-					break
-				}
-			}
-		}
-		pages.RemovePage("popup")
-	}).SetAutocompleteFunc(func(currentText string) []string {
-		if len(currentText) == 0 {
-			return autoCompleteEntries
-		}
-		res := make([]string, 0, len(autoCompleteEntries))
-		for _, v := range autoCompleteEntries {
-			if strings.Contains(v, currentText) {
-				res = append(res, v)
-			}
-		}
-		return res
-	}).SetFieldWidth(42)
-	pages.AddPage("popup", popup, false, true)
+func modal(p tview.Primitive, width, height int) tview.Primitive {
+	return tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(p, height, 1, true).
+			AddItem(nil, 0, 1, false), width, 1, true).
+		AddItem(nil, 0, 1, false)
 }
 
 func singleCopyTo(pages *tview.Pages, selectedConfig ssh.SSHConfig) {

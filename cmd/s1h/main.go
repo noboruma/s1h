@@ -34,6 +34,7 @@ func main() {
 
 	if len(os.Args) == 1 {
 		configs := loadConfigs()
+		tui.Version = Version
 		startMainTUI(configs)
 	} else {
 		key, credsFile := loadOrStoreLocalEncryptedFile()
@@ -162,10 +163,11 @@ func getConfigDir() string {
 		log.Fatalf("Error loading creds: %v\n", err)
 	}
 	configDir = filepath.Join(configDir, "s1h")
-	err = os.MkdirAll(configDir, 0755)
+	err = os.MkdirAll(configDir, 0700)
 	if err != nil {
 		log.Fatalf("Error loading creds: %v\n", err)
 	}
+	_ = os.Chmod(configDir, 0700)
 	return configDir
 }
 
@@ -182,11 +184,16 @@ func loadConfigs() []ssh.SSHConfig {
 
 	configDir := getConfigDir()
 
-	masterKeyFile := filepath.Join(configDir, masterKeyFileName)
+	masterKeyFile := masterKeyPath()
 	credsFile := filepath.Join(configDir, credsFileName)
 
 	var creds credentials.Credentials
 	key, err := credentials.LoadMasterKey(masterKeyFile)
+	if err != nil && fileExists(credsFile) {
+		warning := fmt.Sprintf("Master key not found at %s: stored passwords are unavailable.\nIs the drive holding it mounted? (see S1H_MASTER_KEY)", masterKeyFile)
+		fmt.Fprintln(os.Stderr, warning)
+		tui.StartupWarning = warning
+	}
 	if err == nil {
 		creds, err = credentials.LoadCredentials(credsFile, key)
 		if err != nil {
@@ -202,41 +209,106 @@ func startMainTUI(configs []ssh.SSHConfig) {
 	configDir := getConfigDir()
 	historyFile := filepath.Join(configDir, historyFileName)
 
-	tui.PopulateAutocompleteCaches(configs)
 	err := ssh.LoadSCPHistory(historyFile)
 	if err != nil {
 		log.Fatalf("Error loading scp history")
 	}
 
+	tui.Store = credStore{}
+	tui.MasterKeyLocation = masterKeyLocation
 	tui.DisplaySSHConfig(configs)
 }
 
 func loadOrStoreLocalEncryptedFile() ([]byte, string) {
-	configDir := getConfigDir()
-	masterKeyFile := filepath.Join(configDir, masterKeyFileName)
-	credsFile := filepath.Join(configDir, credsFileName)
-
-	_, err := os.Stat(masterKeyFile)
+	key, credsFile, created, err := ensureMasterKey()
 	if err != nil {
-		key, err := credentials.GenerateMasterKey()
-		if err != nil {
-			fmt.Println("Error generating master key: ", err)
-			os.Exit(1)
-		}
-
-		err = credentials.SaveMasterKey(masterKeyFile, key)
-		if err != nil {
-			fmt.Println("Error saving master key: ", err)
-			os.Exit(1)
-		}
-
-		fmt.Println("Master key saved to", masterKeyFile)
-	}
-
-	key, err := credentials.LoadMasterKey(masterKeyFile)
-	if err != nil {
-		fmt.Println("Error loading master key:", err)
+		fmt.Println(err)
 		os.Exit(1)
 	}
+	if created {
+		fmt.Println("Master key saved to", masterKeyPath())
+	}
+	if masterKeyLocation() == tui.KeySameDisk {
+		fmt.Fprintf(os.Stderr, "Warning: master key %s is on the same disk as %s; anyone reading that disk can decrypt your passwords. Consider moving it to a USB stick (see S1H_MASTER_KEY).\n", masterKeyPath(), credsFile)
+	}
 	return key, credsFile
+}
+
+func ensureMasterKey() (key []byte, credsFile string, created bool, err error) {
+	masterKeyFile := masterKeyPath()
+	credsFile = filepath.Join(getConfigDir(), credsFileName)
+
+	if !fileExists(masterKeyFile) {
+		if fileExists(credsFile) {
+			return nil, "", false, fmt.Errorf("master key not found at %s, refusing to create a new one: %s could no longer be decrypted (is the drive holding the key mounted?)", masterKeyFile, credsFile)
+		}
+		key, err := credentials.GenerateMasterKey()
+		if err != nil {
+			return nil, "", false, fmt.Errorf("error generating master key: %w", err)
+		}
+		if err := credentials.SaveMasterKey(masterKeyFile, key); err != nil {
+			return nil, "", false, fmt.Errorf("error saving master key: %w", err)
+		}
+		created = true
+	}
+
+	key, err = credentials.LoadMasterKey(masterKeyFile)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("error loading master key: %w", err)
+	}
+	return key, credsFile, created, nil
+}
+
+type credStore struct{}
+
+func (credStore) Put(host string, entry credentials.Entry) error {
+	key, credsFile, _, err := ensureMasterKey()
+	if err != nil {
+		return err
+	}
+	return credentials.PutEntry(credsFile, host, entry, key)
+}
+
+func (credStore) SetPassword(host, password string) error {
+	key, credsFile, _, err := ensureMasterKey()
+	if err != nil {
+		return err
+	}
+	return credentials.SetPassword(credsFile, host, password, key)
+}
+
+func (credStore) Remove(host string) error {
+	key, credsFile, _, err := ensureMasterKey()
+	if err != nil {
+		return err
+	}
+	return credentials.RemoveCredential(credsFile, host, key)
+}
+
+func masterKeyPath() string {
+	if p := os.Getenv("S1H_MASTER_KEY"); p != "" {
+		return p
+	}
+	return filepath.Join(getConfigDir(), masterKeyFileName)
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func masterKeyLocation() tui.KeyLocation {
+	keyFile := masterKeyPath()
+	if !fileExists(keyFile) {
+		return tui.KeyMissing
+	}
+	same, ok := credentials.SameDisk(keyFile, filepath.Join(getConfigDir(), credsFileName))
+	switch {
+	case !ok:
+		return tui.KeyUnknown
+	case same:
+		return tui.KeySameDisk
+	default:
+		return tui.KeySeparateDisk
+	}
 }

@@ -10,7 +10,7 @@ func PopulateCredentialsToConfig(creds credentials.Credentials, configs []ssh.SS
 	for i, cfg := range configs {
 		cred := creds.Entries[cfg.Host]
 		cfg.Password = cred.Password
-		if cred.Hostname != "" { // Replace outdated data
+		if cred.Hostname != "" {
 			cfg.HostName = cred.Hostname
 			cfg.User = cred.User
 			cfg.Port = cred.Port
@@ -18,7 +18,6 @@ func PopulateCredentialsToConfig(creds credentials.Credentials, configs []ssh.SS
 		configs[i] = cfg
 		processed[cfg.Host] = struct{}{}
 	}
-	// Add non existing entries
 	for k, added := range creds.Entries {
 		if added.Hostname == "" {
 			continue
@@ -33,6 +32,7 @@ func PopulateCredentialsToConfig(creds credentials.Credentials, configs []ssh.SS
 			HostName:     added.Hostname,
 			IdentityFile: "",
 			Password:     added.Password,
+			Managed:      true,
 		})
 	}
 	return configs

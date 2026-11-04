@@ -1,29 +1,45 @@
-name: goreleaser
+# Builds s1h for Linux and macOS (amd64/arm64) and attaches the binaries (and
+# their SHA-256 checksums) to a GitHub release when it is published.
+name: release
 
 on:
   release:
     types: [published]
 
 permissions:
-  contents: write
+  contents: write # upload release assets
 
 jobs:
-  goreleaser:
+  build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin]
+        goarch: [amd64, arm64]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
         with:
-          fetch-depth: 0
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: stable
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          args: release --clean
+          go-version-file: go.mod
+
+      - name: Test
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64' # tests are platform independent; run them once
+        run: go test ./...
+
+      - name: Build
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CGO_ENABLED: "0" # static binary, no libc dependency
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ github.event.release.tag_name }}
+        run: |
+          name="s1h-${GOOS}-${GOARCH}"
+          mkdir -p dist
+          go build -trimpath -ldflags "-X main.Version=${VERSION} -s -w" -o "dist/${name}" ./cmd/s1h
+          (cd dist && sha256sum "${name}" > "${name}.sha256")
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/* --repo "${{ github.repository }}" --clobber

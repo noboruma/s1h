@@ -11,7 +11,3 @@ s1h: ./cmd/s1h/main.go ./internal/ssh/ssh.go
 clean:
 	-rm s1h
 	-rm -rf dist
-
-release:
-	go install github.com/goreleaser/goreleaser/v2@latest
-	goreleaser release --clean
