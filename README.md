@@ -67,5 +67,3 @@ export S1H_MASTER_KEY=/media/usb/s1h-master.key   # in your shell profile
 ## License
 
 MIT. Pull requests and issues are welcome.
-
-**Author:** Thomas Legris
