@@ -14,6 +14,7 @@ func PopulateCredentialsToConfig(creds credentials.Credentials, configs []ssh.SS
 			cfg.HostName = cred.Hostname
 			cfg.User = cred.User
 			cfg.Port = cred.Port
+			cfg.CredsEndpoint = true
 		}
 		configs[i] = cfg
 		processed[cfg.Host] = struct{}{}
@@ -33,6 +34,8 @@ func PopulateCredentialsToConfig(creds credentials.Credentials, configs []ssh.SS
 			IdentityFile: "",
 			Password:     added.Password,
 			Managed:      true,
+
+			CredsEndpoint: true,
 		})
 	}
 	return configs

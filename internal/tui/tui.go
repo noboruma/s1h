@@ -35,7 +35,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 	info := tview.NewTextView().SetDynamicColors(true)
 	refreshInfo := func() {
 		info.SetText(headerInfo(len(table.visible), len(table.hosts),
-			table.ReachableCount(), len(table.Marked())))
+			table.ReachableCount(), len(table.Marked()), table.ForwardCount(), table.SavedForwardCount()))
 	}
 	refreshInfo()
 
@@ -54,7 +54,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 		SetFieldBackgroundColor(tcell.ColorDefault)
 	filterRow := tview.NewFlex().SetDirection(tview.FlexRow)
 
-	root.AddItem(header, len(logoLines), 0, false)
+	root.AddItem(header, max(len(logoLines), headerRows), 0, false)
 	root.AddItem(filterRow, 0, 0, false)
 	root.AddItem(pages, 0, 1, true)
 
@@ -100,7 +100,13 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 	go reachabilityCheck(table, check)
 	go spinStatus(table, app)
 
-	ui := &hostUI{app: app, pages: pages, table: table, refresh: refreshInfo, check: check}
+	ui := &hostUI{app: app, pages: pages, table: table, refresh: refreshInfo, check: check,
+		pendingForwards: map[string]bool{}}
+	if err := ui.loadForwards(); err != nil {
+		StartupWarning = strings.TrimSpace(StartupWarning + "\nCould not load saved port forwards: " + err.Error())
+	}
+	table.Render()
+	refreshInfo()
 
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if app.GetFocus() == filterInput {
@@ -165,7 +171,20 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 				singleExecOn(pages, h.cfg)
 			}
 			return nil
-		case 'm':
+		case 'p':
+			if ok {
+				ui.forwardPopup(h)
+			}
+			return nil
+		case 'R':
+			if ok {
+				ui.reloadForwards([]*hostEntry{h})
+			}
+			return nil
+		case 'F':
+			ui.reloadForwards(table.Snapshot())
+			return nil
+		case ' ':
 			if !ok {
 				return nil
 			}
@@ -226,6 +245,7 @@ func DisplaySSHConfig(configs []ssh.SSHConfig) {
 		infoPopup(pages, StartupWarning)
 	}
 
+	defer closeAllForwards(table.Snapshot())
 	if err := app.SetRoot(root, true).SetFocus(table).Run(); err != nil {
 		panic(err)
 	}

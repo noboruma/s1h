@@ -1,10 +1,13 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/noboruma/s1h/internal/config"
 	"github.com/noboruma/s1h/internal/credentials"
 	"github.com/noboruma/s1h/internal/ssh"
 	"github.com/rivo/tview"
@@ -16,7 +19,16 @@ type CredentialStore interface {
 	Remove(host string) error
 }
 
+// Store keeps the encrypted passwords.
 var Store CredentialStore
+
+// HostConfigStore edits Host blocks of ~/.ssh/config.
+type HostConfigStore interface {
+	UpsertHost(config.HostBlock) error
+	RemoveHost(host string) error
+}
+
+var HostConfigs HostConfigStore
 
 type hostUI struct {
 	app     *tview.Application
@@ -24,6 +36,9 @@ type hostUI struct {
 	table   *hostTable
 	refresh func()
 	check   func(*hostEntry)
+
+	fwdState        map[string][]config.SavedForward // s1h's own forwards, by host
+	pendingForwards map[string]bool                  // forwards being opened, by host|local
 }
 
 func (u *hostUI) closePopup() { u.pages.RemovePage("popup") }
@@ -37,7 +52,7 @@ func (u *hostUI) showForm(title string, form *tview.Form, height int) {
 type hostFields struct {
 	form                               *tview.Form
 	host, hostname, port, user, passwd *tview.InputField
-	confirm                            *tview.InputField
+	confirm, forwards                  *tview.InputField
 }
 
 func newHostFields(cfg ssh.SSHConfig, withHost bool) hostFields {
@@ -60,14 +75,19 @@ func newHostFields(cfg ssh.SSHConfig, withHost bool) hostFields {
 	f.user = input("User: ", cfg.User)
 	f.passwd = secret("Password: ", cfg.Password)
 	f.confirm = secret("Confirm: ", cfg.Password)
+	var fwds []string
+	for _, fw := range cfg.LocalForwards {
+		fwds = append(fwds, fw.LFlag())
+	}
+	f.forwards = input("Forwards: ", strings.Join(fwds, ", "))
 	return f
 }
 
 func (f hostFields) read(cfg ssh.SSHConfig) (ssh.SSHConfig, error) {
 	if f.host != nil {
 		cfg.Host = strings.TrimSpace(f.host.GetText())
-		if cfg.Host == "" || strings.ContainsAny(cfg.Host, " \t*") {
-			return cfg, fmt.Errorf("Host must be non-empty, without spaces or *")
+		if cfg.Host == "" || strings.ContainsAny(cfg.Host, " \t*?") {
+			return cfg, fmt.Errorf("Host must be non-empty, without spaces, * or ?")
 		}
 	}
 	cfg.HostName = strings.TrimSpace(f.hostname.GetText())
@@ -83,20 +103,48 @@ func (f hostFields) read(cfg ssh.SSHConfig) (ssh.SSHConfig, error) {
 		return cfg, fmt.Errorf("Passwords do not match")
 	}
 	cfg.Password = f.passwd.GetText()
+	cfg.LocalForwards = nil
+	for _, item := range strings.FieldsFunc(f.forwards.GetText(), func(r rune) bool { return r == ',' || r == ' ' }) {
+		fw, err := ssh.ParseLFlag(item)
+		if err != nil {
+			return cfg, err
+		}
+		if !slices.Contains(cfg.LocalForwards, fw) {
+			cfg.LocalForwards = append(cfg.LocalForwards, fw)
+		}
+	}
 	return cfg, nil
 }
 
-func entryOf(cfg ssh.SSHConfig) credentials.Entry {
-	return credentials.Entry{
-		Password: cfg.Password,
-		Hostname: cfg.HostName,
-		User:     cfg.User,
-		Port:     cfg.Port,
+func blockOf(cfg ssh.SSHConfig) config.HostBlock {
+	return config.HostBlock{
+		Host:          cfg.Host,
+		HostName:      cfg.HostName,
+		Port:          cfg.Port,
+		User:          cfg.User,
+		LocalForwards: cfg.LocalForwards,
 	}
 }
 
-func (u *hostUI) editPopup(h *hostEntry) {
+// savePassword leaves only the password of cfg in the credentials file, also
+// dropping any HostName/User/Port stored there (now in ~/.ssh/config).
+// Nothing is touched when there is nothing to change, so hosts without a
+// password never need a master key.
+func savePassword(old, cfg ssh.SSHConfig) error {
+	if cfg.Password == old.Password && !old.CredsEndpoint {
+		return nil
+	}
 	if Store == nil {
+		return fmt.Errorf("storing passwords is not available")
+	}
+	if cfg.Password == "" {
+		return Store.Remove(cfg.Host)
+	}
+	return Store.Put(cfg.Host, credentials.Entry{Password: cfg.Password})
+}
+
+func (u *hostUI) editPopup(h *hostEntry) {
+	if HostConfigs == nil {
 		infoPopup(u.pages, "Editing hosts is not available")
 		return
 	}
@@ -107,38 +155,41 @@ func (u *hostUI) editPopup(h *hostEntry) {
 			infoPopup(u.pages, err.Error())
 			return
 		}
-		// Only override ~/.ssh/config when the endpoint actually changed.
-		endpointChanged := cfg.HostName != h.cfg.HostName || cfg.User != h.cfg.User || cfg.Port != h.cfg.Port
-		if h.cfg.Managed || endpointChanged {
-			err = Store.Put(cfg.Host, entryOf(cfg))
-		} else {
-			err = Store.SetPassword(cfg.Host, cfg.Password)
-		}
 		u.closePopup()
-		if err != nil {
-			infoPopup(u.pages, fmt.Sprintf("Error saving %s: %v", cfg.Host, err))
+		if err := HostConfigs.UpsertHost(blockOf(cfg)); err != nil {
+			infoPopup(u.pages, fmt.Sprintf("Error saving %s to ~/.ssh/config: %v", cfg.Host, err))
 			return
 		}
+		cfg.Managed, cfg.CredsEndpoint = false, false
+		endpointChanged := cfg.HostName != h.cfg.HostName || cfg.User != h.cfg.User || cfg.Port != h.cfg.Port
+		pwErr := savePassword(h.cfg, cfg)
+		if pwErr != nil {
+			cfg.Password = h.cfg.Password
+		}
 		h.cfg = cfg
+		u.syncSaved(h)
 		if endpointChanged {
 			h.checked.Store(false)
 			u.check(h)
 		}
 		u.table.Render()
 		u.refresh()
+		if pwErr != nil {
+			infoPopup(u.pages, fmt.Sprintf("Saved %s to ~/.ssh/config, but not its password: %v", cfg.Host, pwErr))
+		}
 	})
 	f.form.AddButton("Cancel", u.closePopup)
-	u.showForm(fmt.Sprintf("Edit %s (empty password clears it)", h.cfg.Host), f.form, 15)
+	u.showForm(fmt.Sprintf("Edit %s (empty password clears it)", h.cfg.Host), f.form, 17)
 }
 
 func (u *hostUI) addPopup() {
-	if Store == nil {
+	if HostConfigs == nil {
 		infoPopup(u.pages, "Adding hosts is not available")
 		return
 	}
 	f := newHostFields(ssh.SSHConfig{Port: "22", User: "root"}, true)
 	f.form.AddButton("Add", func() {
-		cfg, err := f.read(ssh.SSHConfig{Managed: true})
+		cfg, err := f.read(ssh.SSHConfig{})
 		if err != nil {
 			infoPopup(u.pages, err.Error())
 			return
@@ -148,40 +199,67 @@ func (u *hostUI) addPopup() {
 			return
 		}
 		u.closePopup()
-		if err := Store.Put(cfg.Host, entryOf(cfg)); err != nil {
-			infoPopup(u.pages, fmt.Sprintf("Error saving %s: %v", cfg.Host, err))
+		if err := HostConfigs.UpsertHost(blockOf(cfg)); err != nil {
+			infoPopup(u.pages, fmt.Sprintf("Error saving %s to ~/.ssh/config: %v", cfg.Host, err))
 			return
 		}
-		u.check(u.table.Add(cfg))
+		pwErr := savePassword(ssh.SSHConfig{}, cfg)
+		if pwErr != nil {
+			cfg.Password = ""
+		}
+		h := u.table.Add(cfg)
+		u.syncSaved(h)
+		u.table.Render()
+		u.check(h)
 		u.refresh()
+		if pwErr != nil {
+			infoPopup(u.pages, fmt.Sprintf("Added %s to ~/.ssh/config, but not its password: %v", cfg.Host, pwErr))
+		}
 	})
 	f.form.AddButton("Cancel", u.closePopup)
-	u.showForm("Add host", f.form, 17)
+	u.showForm("Add host", f.form, 19)
 }
 
 func (u *hostUI) removePopup(h *hostEntry) {
-	if !h.cfg.Managed {
-		infoPopup(u.pages, fmt.Sprintf("%s is defined in ~/.ssh/config, remove it there", h.cfg.Host))
-		return
-	}
-	if Store == nil {
+	if HostConfigs == nil {
 		infoPopup(u.pages, "Removing hosts is not available")
 		return
 	}
+	what := "Its Host block in ~/.ssh/config"
+	if h.cfg.Managed {
+		what = "Its s1h entry"
+	}
 	confirm := tview.NewModal().
-		SetText(fmt.Sprintf("Remove %s (%s)?\nIts stored credentials will be deleted.", h.cfg.Host, h.cfg.HostName)).
+		SetText(fmt.Sprintf("Remove %s (%s)?\n%s, stored password and s1h port forwards will be deleted.",
+			h.cfg.Host, h.cfg.HostName, what)).
 		AddButtons([]string{"Cancel", "Remove"}).
 		SetDoneFunc(func(_ int, label string) {
 			u.closePopup()
 			if label != "Remove" {
 				return
 			}
-			if err := Store.Remove(h.cfg.Host); err != nil {
-				infoPopup(u.pages, fmt.Sprintf("Error removing %s: %v", h.cfg.Host, err))
-				return
+			if !h.cfg.Managed {
+				if err := HostConfigs.RemoveHost(h.cfg.Host); err != nil {
+					infoPopup(u.pages, fmt.Sprintf("Error removing %s: %v", h.cfg.Host, err))
+					return
+				}
+			}
+			var errs []error
+			if h.cfg.Password != "" || h.cfg.Managed || h.cfg.CredsEndpoint {
+				if Store == nil {
+					errs = append(errs, fmt.Errorf("credentials store is not available"))
+				} else if err := Store.Remove(h.cfg.Host); err != nil {
+					errs = append(errs, err)
+				}
+			}
+			if err := u.dropHost(h); err != nil {
+				errs = append(errs, err)
 			}
 			u.table.Remove(h)
 			u.refresh()
+			if err := errors.Join(errs...); err != nil {
+				infoPopup(u.pages, fmt.Sprintf("Removed %s, but: %v", h.cfg.Host, err))
+			}
 		})
 	u.pages.AddPage("popup", confirm, false, true)
 }

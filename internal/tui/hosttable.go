@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"net"
 	"slices"
 	"strings"
 	"sync"
@@ -23,6 +24,8 @@ type hostEntry struct {
 	marked    bool
 	reachable atomic.Bool
 	checked   atomic.Bool
+	forwards  []*ssh.PortForward // open forwards, UI goroutine only
+	saved     []savedForward     // config + s1h forwards, UI goroutine only
 }
 
 // Mutated only from the UI goroutine; mu guards hosts for background readers.
@@ -134,6 +137,43 @@ func (t *hostTable) ReachableCount() int {
 	return n
 }
 
+func (t *hostTable) ForwardCount() int {
+	n := 0
+	for _, h := range t.hosts {
+		n += len(h.forwards)
+	}
+	return n
+}
+
+// SavedForwardCount counts the forwards [F] would open.
+func (t *hostTable) SavedForwardCount() int {
+	n := 0
+	for _, h := range t.hosts {
+		n += h.enabledCount()
+	}
+	return n
+}
+
+// forwardsLabel lists the host's forward local ports: ● open, ○ closed,
+// ⊘ disabled.
+func forwardsLabel(h *hostEntry) string {
+	var ports []string
+	for _, spec := range h.forwardSpecs() {
+		p := spec.Local
+		if _, port, err := net.SplitHostPort(p); err == nil {
+			p = port
+		}
+		mark := "○"
+		if h.openForward(spec) != nil {
+			mark = "●"
+		} else if s, ok := h.findSaved(spec); ok && !s.enabled {
+			mark = "⊘"
+		}
+		ports = append(ports, mark+p)
+	}
+	return strings.Join(ports, " ")
+}
+
 func (t *hostTable) Pending() bool {
 	for _, h := range t.Snapshot() {
 		if !h.checked.Load() {
@@ -145,7 +185,7 @@ func (t *hostTable) Pending() bool {
 
 func (t *hostTable) Render() {
 	t.Clear()
-	for col, title := range []string{"", "Host", "HostName", "Port", "User", "Auth"} {
+	for col, title := range []string{"", "Host", "HostName", "Port", "User", "Auth", "Forwards"} {
 		cell := tview.NewTableCell(title).
 			SetTextColor(tcell.ColorWhite).
 			SetBackgroundColor(tableHeaderBg).
@@ -179,7 +219,7 @@ func (t *hostTable) Render() {
 		} else if cfg.IdentityFile != "" {
 			auth = "Key"
 		}
-		for col, text := range []string{cfg.Host, cfg.HostName, cfg.Port, cfg.User, auth} {
+		for col, text := range []string{cfg.Host, cfg.HostName, cfg.Port, cfg.User, auth, forwardsLabel(h)} {
 			t.SetCell(row, colHost+col, tview.NewTableCell(text).
 				SetExpansion(1).
 				SetAlign(tview.AlignLeft))

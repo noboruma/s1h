@@ -21,6 +21,7 @@ const (
 	masterKeyFileName = "master.key"
 	credsFileName     = "credentials.enc"
 	historyFileName   = "history"
+	forwardsFileName  = "forwards.json"
 )
 
 func main() {
@@ -172,10 +173,7 @@ func getConfigDir() string {
 }
 
 func loadConfigs() []ssh.SSHConfig {
-	configPath := os.Getenv("SSH_CONFIG")
-	if configPath == "" {
-		configPath = filepath.Join(os.Getenv("HOME"), ".ssh", "config")
-	}
+	configPath := sshConfigPath()
 
 	configs, err := ssh.ParseSSHConfig(configPath)
 	if err != nil {
@@ -215,6 +213,8 @@ func startMainTUI(configs []ssh.SSHConfig) {
 	}
 
 	tui.Store = credStore{}
+	tui.SavedForwards = config.ForwardsFile{Path: filepath.Join(configDir, forwardsFileName)}
+	tui.HostConfigs = sshConfigFile{path: sshConfigPath()}
 	tui.MasterKeyLocation = masterKeyLocation
 	tui.DisplaySSHConfig(configs)
 }
@@ -284,6 +284,18 @@ func (credStore) Remove(host string) error {
 	}
 	return credentials.RemoveCredential(credsFile, host, key)
 }
+
+func sshConfigPath() string {
+	if p := os.Getenv("SSH_CONFIG"); p != "" {
+		return p
+	}
+	return filepath.Join(os.Getenv("HOME"), ".ssh", "config")
+}
+
+type sshConfigFile struct{ path string }
+
+func (f sshConfigFile) UpsertHost(b config.HostBlock) error { return config.UpsertHost(f.path, b) }
+func (f sshConfigFile) RemoveHost(host string) error        { return config.RemoveHost(f.path, host) }
 
 func masterKeyPath() string {
 	if p := os.Getenv("S1H_MASTER_KEY"); p != "" {

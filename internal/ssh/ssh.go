@@ -31,7 +31,14 @@ type SSHConfig struct {
 	HostName     string
 	IdentityFile string
 	Password     string
-	Managed      bool
+	// Managed hosts exist only in s1h's credentials file (added by older
+	// versions); they move to ~/.ssh/config when edited.
+	Managed bool
+	// CredsEndpoint is set when HostName/User/Port come from the credentials
+	// file, overriding ~/.ssh/config.
+	CredsEndpoint bool
+	// LocalForwards are the saved port forwards (LocalForward lines).
+	LocalForwards []Forward
 }
 
 func (c SSHConfig) Endpoint() string {
@@ -78,11 +85,14 @@ func ParseSSHConfig(filePath string) ([]SSHConfig, error) {
 			continue
 		}
 
-		if strings.HasPrefix(line, "Host ") {
+		if strings.HasPrefix(line, "Host ") || strings.HasPrefix(line, "Match ") {
 			if inHostSection {
 				configs = append(configs, currentConfig)
 			}
-			if strings.Contains(line, "*") {
+			// Wildcard and Match blocks are not hosts: skip their settings
+			// instead of attaching them to the previous host.
+			inHostSection = false
+			if strings.HasPrefix(line, "Match ") || strings.Contains(line, "*") {
 				continue
 			}
 			currentConfig = SSHConfig{Host: strings.TrimPrefix(line, "Host ")}
@@ -95,6 +105,12 @@ func ParseSSHConfig(filePath string) ([]SSHConfig, error) {
 			}
 			key, value := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 
+			if strings.EqualFold(key, "LocalForward") {
+				if f, ok := ParseLocalForward(value); ok {
+					currentConfig.LocalForwards = append(currentConfig.LocalForwards, f)
+				}
+				continue
+			}
 			switch key {
 			case "User":
 				currentConfig.User = value

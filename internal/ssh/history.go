@@ -38,7 +38,7 @@ func LoadSCPHistory(path string) error {
 		localFileCache, err = os.Create(path)
 		return err
 	}
-	localFileCache, err = os.Open(path)
+	localFileCache, err = os.OpenFile(path, os.O_RDWR, 0o600)
 	return err
 }
 
@@ -47,7 +47,7 @@ func GetSCPUploadEntry(host string) SCPHistoryEntry {
 }
 
 func GetSCPDownloadEntry(host string) SCPHistoryEntry {
-	return hostsHistory[host+":dowload"].SCPHistoryEntry
+	return hostsHistory[host+":download"].SCPHistoryEntry
 }
 
 func PutSCPUploadEntry(host string, entry SCPHistoryEntry) {
@@ -58,70 +58,45 @@ func PutSCPDownloadEntry(host string, entry SCPHistoryEntry) {
 	putSCPEntry(host+":download", entry)
 }
 
-func putSCPEntry(host string, entry SCPHistoryEntry) {
-	v, has := hostsHistory[host]
+func putSCPEntry(key string, entry SCPHistoryEntry) {
+	v, has := hostsHistory[key]
 	if has && v.SCPHistoryEntry == entry {
 		return
 	}
-	existingEntry := hostsHistory[host]
-	existingEntry.SCPHistoryEntry = entry
-	hostsHistory[host] = existingEntry
-	b, err := json.Marshal(hostsHistory)
-	if err != nil {
-		fmt.Println("Failed to update local history cache")
-		return
-	}
-	err = localFileCache.Truncate(0)
-	if err != nil {
-		fmt.Println("Failed to update local history cache")
-		return
-	}
-	_, err = localFileCache.Write(b)
-	if err != nil {
-		fmt.Println("Failed to update local history cache")
-		return
-	}
-	err = localFileCache.Sync()
-	if err != nil {
-		fmt.Println("Failed to update local history cache")
-		return
-	}
+	v.SCPHistoryEntry = entry
+	hostsHistory[key] = v
+	persistHistory()
 }
 
 func GetExecEntry(host string) ExecHistoryEntry {
+	if e, ok := hostsHistory[host+":exec"]; ok {
+		return e.ExecHistoryEntry
+	}
+	// Exec history used to be stored under the upload key.
 	return hostsHistory[host+":upload"].ExecHistoryEntry
 }
 
 func PutExecEntry(host string, entry ExecHistoryEntry) {
-	putExecEntry(host+":upload", entry)
-}
-
-func putExecEntry(host string, entry ExecHistoryEntry) {
-	v, has := hostsHistory[host]
+	key := host + ":exec"
+	v, has := hostsHistory[key]
 	if has && v.ExecHistoryEntry == entry {
 		return
 	}
-	existingEntry := hostsHistory[host]
-	existingEntry.ExecHistoryEntry = entry
-	hostsHistory[host] = existingEntry
+	v.ExecHistoryEntry = entry
+	hostsHistory[key] = v
+	persistHistory()
+}
+
+func persistHistory() {
 	b, err := json.Marshal(hostsHistory)
-	if err != nil {
-		fmt.Println("Failed to update local history cache")
-		return
+	if err == nil {
+		err = localFileCache.Truncate(0)
 	}
-	err = localFileCache.Truncate(0)
-	if err != nil {
-		fmt.Println("Failed to update local history cache")
-		return
+	if err == nil {
+		_, err = localFileCache.WriteAt(b, 0)
 	}
-	_, err = localFileCache.Write(b)
-	if err != nil {
-		fmt.Println("Failed to update local history cache")
-		return
+	if err == nil {
+		localFileCache.Sync()
 	}
-	err = localFileCache.Sync()
-	if err != nil {
-		fmt.Println("Failed to update local history cache")
-		return
-	}
+	// Best effort: printing here would corrupt the TUI.
 }

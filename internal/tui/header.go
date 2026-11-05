@@ -50,7 +50,9 @@ func logoText() string {
 	return b.String()
 }
 
-func headerInfo(shown, total, reachable, selected int) string {
+const headerRows = 6
+
+func headerInfo(shown, total, reachable, selected, forwards, saved int) string {
 	version := Version
 	if version == "" {
 		version = "dev"
@@ -63,6 +65,7 @@ func headerInfo(shown, total, reachable, selected int) string {
 		row("Hosts", hostsCount(shown, total)),
 		row("Reachable", fmt.Sprintf("[green::b]%d[-::-]/%d", reachable, total)),
 		row("Selected", fmt.Sprintf("[blue::b]%d[-::-]", selected)),
+		row("Forwards", fmt.Sprintf("[green::b]%d[-::-] open, %d enabled", forwards, saved)),
 		row("Master key", masterKeyStatus()),
 	}, "\n")
 }
@@ -77,7 +80,10 @@ var footerHints = []string{
 	"[u]pload",
 	"[d]ownload",
 	"e[x]ec",
-	"[m]ark",
+	"[p]ort forward",
+	"[R]eload forwards",
+	"[F]orward all",
+	"[space] toggle",
 	"[M]ark all/none",
 	"[e]dit",
 	"[+] add",
